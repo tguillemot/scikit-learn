@@ -20,7 +20,7 @@ cdef extern from "math.h":
     float fabsf(float x) nogil
 
 # Round points differing by less than this amount
-# effectively ignoring differences near the 32bit 
+# effectively ignoring differences near the 32bit
 # floating point precision
 cdef float EPSILON = 1e-6
 
@@ -44,9 +44,9 @@ cdef extern from "cblas.h":
 cdef struct Node:
     # Keep track of the center of mass
     float* barycenter
-    # If this is a leaf, the position of the point within this leaf 
+    # If this is a leaf, the position of the point within this leaf
     float* leaf_point_position
-    # The number of points including all 
+    # The number of points including all
     # nodes below this one
     long cumulative_size
     # Number of points at this node
@@ -79,7 +79,7 @@ cdef struct Node:
 
 cdef struct Tree:
     # Holds a pointer to the root node
-    Node* root_node 
+    Node* root_node
     # Number of dimensions in the ouput
     int n_dimensions
     # Total number of cells
@@ -91,7 +91,7 @@ cdef struct Tree:
     # How many cells per node? Should go as 2 ** n_dimensionss
     int n_cell_per_node
 
-cdef Tree* init_tree(float[:] left_edge, float[:] width, int n_dimensions, 
+cdef Tree* init_tree(float[:] left_edge, float[:] width, int n_dimensions,
                      int verbose) nogil:
     # tree is freed by free_tree
     cdef Tree* tree = <Tree*> malloc(sizeof(Tree))
@@ -252,7 +252,7 @@ cdef int insert(Node *root, float pos[3], long point_index, long depth, long
     if DEBUGFLAG:
         printf("[t-SNE] [d=%i] Inserting pos %i [%f, %f] duplicate_count=%i "
                 "into child %p\n", depth, point_index, pos[0], pos[1],
-                duplicate_count, root)    
+                duplicate_count, root)
     # Increment the total number points including this
     # node and below it
     root.cumulative_size += duplicate_count
@@ -280,7 +280,7 @@ cdef int insert(Node *root, float pos[3], long point_index, long depth, long
 
     # If this node is unoccupied, fill it.
     # Otherwise, we need to insert recursively.
-    # Two insertion scenarios: 
+    # Two insertion scenarios:
     # 1) Insert into this node if it is a leaf and empty
     # 2) Subdivide this node if it is currently occupied
     if (root.size == 0) & root.is_leaf:
@@ -335,9 +335,9 @@ cdef int insert(Node *root, float pos[3], long point_index, long depth, long
         if root.size > 0:
             # Remove the point from this node
             for ax in range(n_dimensions):
-                root.leaf_point_position[ax] = -1            
+                root.leaf_point_position[ax] = -1
             root.size = 0
-            root.point_index = -1            
+            root.point_index = -1
         return insert(child, pos, point_index, depth + 1, 1)
 
 cdef int insert_many(Tree* tree, float[:,:] pos_array) nogil:
@@ -365,6 +365,14 @@ cdef int free_tree(Tree* tree) nogil:
     for i in range(3):
         cnt[i] = 0
     free_recursive(tree, tree.root_node, cnt)
+    if not tree.root_node.is_leaf:
+        free(tree.root_node.children)
+    free(tree.root_node.width)
+    free(tree.root_node.left_edge)
+    free(tree.root_node.center)
+    free(tree.root_node.barycenter)
+    free(tree.root_node.leaf_point_position)
+    free(tree.root_node)
     check = cnt[0] == tree.n_cells
     check &= cnt[2] == tree.n_points
     free(tree)
@@ -406,7 +414,7 @@ cdef void free_recursive(Tree* tree, Node *root, long* counts) nogil:
         free_post_children(root)
 
 cdef long count_points(Node* root, long count) nogil:
-    # Walk through the whole tree and count the number 
+    # Walk through the whole tree and count the number
     # of points at the leaf nodes
     if DEBUGFLAG:
         printf("[t-SNE] Counting nodes at root node %p\n", root)
@@ -414,7 +422,7 @@ cdef long count_points(Node* root, long count) nogil:
     cdef int idx
     if root.is_leaf:
         count += root.size
-        if DEBUGFLAG : 
+        if DEBUGFLAG :
             printf("[t-SNE] %p is a leaf node, no children\n", root)
             printf("[t-SNE] %i points in node %p\n", count, root)
         return count
@@ -520,14 +528,14 @@ cdef float compute_gradient_positive(float[:,:] val_P,
             pos_f[i * n_dimensions + ax] = 0.0
         for k in range(K):
             j = neighbors[i, k]
-            # we don't need to exclude the i==j case since we've 
+            # we don't need to exclude the i==j case since we've
             # already thrown it out from the list of neighbors
             D = 0.0
             Q = 0.0
             pij = val_P[i, j]
             for ax in range(n_dimensions):
                 buff[ax] = pos_reference[i, ax] - pos_reference[j, ax]
-                D += buff[ax] ** 2.0  
+                D += buff[ax] ** 2.0
             Q = (((1.0 + D) / dof) ** exponent)
             D = pij * Q
             Q /= sum_Q
@@ -542,23 +550,23 @@ cdef float compute_gradient_positive(float[:,:] val_P,
 
 
 
-cdef void compute_gradient_negative(float[:,:] val_P, 
+cdef void compute_gradient_negative(float[:,:] val_P,
                                     float[:,:] pos_reference,
                                     float* neg_f,
                                     Node *root_node,
                                     float* sum_Q,
                                     float dof,
-                                    float theta, 
-                                    long start, 
+                                    float theta,
+                                    long start,
                                     long stop) nogil:
     if stop == -1:
-        stop = pos_reference.shape[0] 
+        stop = pos_reference.shape[0]
     cdef:
         int ax
         long i, j
         long n = stop - start
         float* force
-        float* iQ 
+        float* iQ
         float* pos
         float* dist2s
         long* sizes
@@ -566,7 +574,7 @@ cdef void compute_gradient_negative(float[:,:] val_P,
         long* l
         int n_dimensions = root_node.tree.n_dimensions
         float qijZ, mult
-        long idx, 
+        long idx,
         long dta = 0
         long dtb = 0
         clock_t t1, t2, t3
@@ -597,7 +605,7 @@ cdef void compute_gradient_negative(float[:,:] val_P,
         t2 = clock()
         # Compute the t-SNE negative force
         # for the digits dataset, walking the tree
-        # is about 10-15x more expensive than the 
+        # is about 10-15x more expensive than the
         # following for loop
         exponent = (dof + 1.0) / -2.0
         for j in range(l[0]):
@@ -625,7 +633,7 @@ cdef void compute_gradient_negative(float[:,:] val_P,
     free(neg_force)
 
 
-cdef void compute_non_edge_forces(Node* node, 
+cdef void compute_non_edge_forces(Node* node,
                                   float theta,
                                   long point_index,
                                   float* pos,
@@ -641,7 +649,7 @@ cdef void compute_non_edge_forces(Node* node,
         int n_dimensions = node.tree.n_dimensions
         long idx, idx1
         float dist_check
-    
+
     # There are no points below this node if cumulative_size == 0
     # so do not bother to calculate any force contributions
     # Also do not compute self-interactions
@@ -655,13 +663,13 @@ cdef void compute_non_edge_forces(Node* node,
         idx = idx1
         for i in range(1, n_dimensions):
             idx += 1
-            deltas[idx] = pos[i] - node.barycenter[i] 
+            deltas[idx] = pos[i] - node.barycenter[i]
         # do np.sqrt(np.sum(deltas**2.0))
         dist2s[l[0]] = snrm2(n_dimensions, &deltas[idx1], 1)
         # Check whether we can use this node as a summary
         # It's a summary node if the angular size as measured from the point
         # is relatively small (w.r.t. to theta) or if it is a leaf node.
-        # If it can be summarized, we use the cell center of mass 
+        # If it can be summarized, we use the cell center of mass
         # Otherwise, we go a higher level of resolution and into the leaves.
         if node.is_leaf or ((node.max_width / dist2s[l[0]]) < theta):
             # Compute the t-SNE force between the reference point and the
@@ -673,7 +681,7 @@ cdef void compute_non_edge_forces(Node* node,
             # Recursively apply Barnes-Hut to child nodes
             for idx in range(node.tree.n_cell_per_node):
                 child = node.children[idx]
-                if child.cumulative_size == 0: 
+                if child.cumulative_size == 0:
                     continue
                 compute_non_edge_forces(child, theta,
                         point_index, pos, force, dist2s, sizes, deltas,
@@ -715,7 +723,7 @@ def calculate_edge(pos_output):
     # Make the boundaries slightly outside of the data
     # to avoid floating point error near the edge
     left_edge = np.min(pos_output, axis=0)
-    right_edge = np.max(pos_output, axis=0) 
+    right_edge = np.max(pos_output, axis=0)
     center = (right_edge + left_edge) * 0.5
     width = np.maximum(np.subtract(right_edge, left_edge), EPSILON)
     # Exagerate width to avoid boundary edge
@@ -724,10 +732,10 @@ def calculate_edge(pos_output):
     right_edge = center + width / 2.0
     return left_edge, right_edge, width
 
-def gradient(float[:,:] pij_input, 
-             float[:,:] pos_output, 
-             np.int64_t[:,:] neighbors, 
-             float[:,:] forces, 
+def gradient(float[:,:] pij_input,
+             float[:,:] pos_output,
+             np.int64_t[:,:] neighbors,
+             float[:,:] forces,
              float theta,
              int n_dimensions,
              int verbose,
@@ -777,7 +785,7 @@ def gradient(float[:,:] pij_input,
     cdef long count = count_points(qt.root_node, 0)
     m = ("Tree consistency failed: unexpected number of points=%i "
          "at root node=%i" % (count, qt.root_node.cumulative_size))
-    assert count == qt.root_node.cumulative_size, m 
+    assert count == qt.root_node.cumulative_size, m
     m = "Tree consistency failed: unexpected number of points on the tree"
     assert count == qt.n_points, m
     free_tree(qt)
@@ -789,7 +797,7 @@ def check_quadtree(X, np.int64_t[:] counts):
     """
     Helper function to access quadtree functions for testing
     """
-    
+
     X = X.astype(np.float32)
     left_edge, right_edge, width = calculate_edge(X)
     # Initialise a tree
@@ -831,7 +839,7 @@ def test_index2offset():
 def test_index_offset():
     cdef int n_dimensions, idx, tidx, k
     cdef int error_check = 1
-    cdef int* offset 
+    cdef int* offset
     for n_dimensions in range(2, 10):
         offset = <int*> malloc(sizeof(int) * n_dimensions)
         for k in range(n_dimensions):

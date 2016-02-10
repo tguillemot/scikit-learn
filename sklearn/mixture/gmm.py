@@ -5,17 +5,16 @@ This implementation corresponds to frequentist (non-Bayesian) formulation
 of Gaussian Mixture Models.
 """
 
-# Author: Ron Weiss <ronweiss@gmail.com>
-#         Fabian Pedregosa <fabian.pedregosa@inria.fr>
-#         Bertrand Thirion <bertrand.thirion@inria.fr>
+# Author: Wei Xue <xuewei4d@gmail.com>
+#         Thierry Guillemot <thierry.guillemot.work@gmail.com>
 
 import warnings
 import numpy as np
 from scipy import linalg
 from time import time
 
-from ..base import BaseEstimator
-from ..utils import check_random_state, check_array
+from ..base import BaseEstimator, DensityMixin
+from ..utils import check_random_state, check_array, deprecated
 from ..utils.extmath import logsumexp
 from ..utils.validation import check_is_fitted
 from .. import cluster
@@ -112,7 +111,7 @@ def sample_gaussian(mean, covar, covariance_type='diag', n_samples=1,
     return (rand.T + mean).T
 
 
-class GMM(BaseEstimator):
+class GMM(BaseEstimator, DensityMixin):
     """Gaussian Mixture Model
 
     Representation of a Gaussian mixture model probability distribution.
@@ -137,7 +136,7 @@ class GMM(BaseEstimator):
     random_state: RandomState or an int seed (None by default)
         A random number generator instance
 
-    min_covar : float, optional
+    reg_covar : float, optional
         Floor on the diagonal of the covariance matrix to prevent
         overfitting.  Defaults to 1e-3.
 
@@ -145,7 +144,7 @@ class GMM(BaseEstimator):
         Convergence threshold. EM iterations will stop when average
         gain in log-likelihood is below this threshold.  Defaults to 1e-3.
 
-    n_iter : int, optional
+    max_iter : int, optional
         Number of EM iterations to perform.
 
     n_init : int, optional
@@ -209,8 +208,8 @@ class GMM(BaseEstimator):
     >>> obs = np.concatenate((np.random.randn(100, 1),
     ...                       10 + np.random.randn(300, 1)))
     >>> g.fit(obs) # doctest: +NORMALIZE_WHITESPACE
-    GMM(covariance_type='diag', init_params='wmc', min_covar=0.001,
-            n_components=2, n_init=1, n_iter=100, params='wmc',
+    GMM(covariance_type='diag', init_params='wmc', reg_covar=0.001,
+            n_components=2, n_init=1, max_iter=100, params='wmc',
             random_state=None, tol=0.001, verbose=0)
     >>> np.round(g.weights_, 2)
     array([ 0.75,  0.25])
@@ -227,8 +226,8 @@ class GMM(BaseEstimator):
     >>> # Refit the model on new data (initial parameters remain the
     >>> # same), this time with an even split between the two modes.
     >>> g.fit(20 * [[0]] +  20 * [[10]]) # doctest: +NORMALIZE_WHITESPACE
-    GMM(covariance_type='diag', init_params='wmc', min_covar=0.001,
-            n_components=2, n_init=1, n_iter=100, params='wmc',
+    GMM(covariance_type='diag', init_params='wmc', reg_covar=0.001,
+            n_components=2, n_init=1, max_iter=100, params='wmc',
             random_state=None, tol=0.001, verbose=0)
     >>> np.round(g.weights_, 2)
     array([ 0.5,  0.5])
@@ -236,32 +235,83 @@ class GMM(BaseEstimator):
     """
 
     def __init__(self, n_components=1, covariance_type='diag',
-                 random_state=None, tol=1e-3, min_covar=1e-3,
-                 n_iter=100, n_init=1, params='wmc', init_params='wmc',
-                 verbose=0):
+                 random_state=None, tol=1e-3, reg_covar=1e-3,
+                 max_iter=100, n_init=1,
+                 params='wmc', init_params='wmc',
+                 verbose=0,
+                 # deprecated 0.20
+                 min_covar=None, n_iter=None):
+        if min_covar is not None:
+            warnings.warn("'min_covar' was renamed to reg_covar and will "
+                          "be removed in 0.20.",
+                          DeprecationWarning)
+            reg_covar = min_covar
+
+        if n_iter is not None:
+            warnings.warn("'n_iter' was renamed to max_iter and will "
+                          "be removed in 0.20.",
+                          DeprecationWarning)
+            max_iter = n_iter
+
         self.n_components = n_components
         self.covariance_type = covariance_type
         self.tol = tol
-        self.min_covar = min_covar
+        self.reg_covar = reg_covar
         self.random_state = random_state
-        self.n_iter = n_iter
+        self.max_iter = max_iter
         self.n_init = n_init
         self.params = params
         self.init_params = init_params
         self.verbose = verbose
 
+        self.converged_ = False
+        self.weights_ = np.ones(self.n_components) / self.n_components
+
         if covariance_type not in ['spherical', 'tied', 'diag', 'full']:
-            raise ValueError('Invalid value for covariance_type: %s' %
-                             covariance_type)
+                raise ValueError("Invalid value for 'covariance_type': %s "
+                                 "'covariance_type' should be in "
+                                 "['spherical', 'tied', 'diag', 'full']"
+                                 % covariance_type)
 
         if n_init < 1:
             raise ValueError('GMM estimation requires at least one run')
 
-        self.weights_ = np.ones(self.n_components) / self.n_components
+    # FIXME Une fois le code fini changer max_iter < 0 par
+    # max_iter < 1 et regler le probleme de quick initialization failed
+        if max_iter < 0:
+            raise ValueError("Invalid value for 'max_iter': %d "
+                             "Estimation requires at least one iteration"
+                             % max_iter)
 
-        # flag to indicate exit status of fit() method: converged (True) or
-        # n_iter reached (False)
-        self.converged_ = False
+        if reg_covar < 0:
+            raise ValueError("Invalid value for 'reg_covar': %.5f "
+                             "regularization on covariance must be "
+                             "non-negative"
+                             % reg_covar)
+
+    @property
+    @deprecated("Attribute n_iter is deprecated and "
+                "will be removed in 0.20. Use 'max_iter' instead")
+    def n_iter(self):
+        return self.max_iter
+
+    @n_iter.setter
+    @deprecated("Attribute n_iter is deprecated and "
+                "will be removed in 0.20. Use 'max_iter' instead")
+    def n_iter(self, value):
+        self.max_iter = value
+
+    @property
+    @deprecated("Attribute min_covar is deprecated and "
+                "will be removed in 0.20. Use 'reg_covar' instead")
+    def min_covar(self):
+        return self.reg_covar
+
+    @min_covar.setter
+    @deprecated("Attribute min_covar is deprecated and "
+                "will be removed in 0.20. Use 'reg_covar' instead")
+    def min_covar(self, value):
+        self.reg_covar = value
 
     def _get_covars(self):
         """Covariance parameters for each mixture component.
@@ -444,7 +494,7 @@ class GMM(BaseEstimator):
         expectation-maximization (EM) algorithm. If you want to avoid
         this step, set the keyword argument init_params to the empty
         string '' when creating the GMM object. Likewise, if you would
-        like just to do an initialization, set n_iter=0.
+        like just to do an initialization, set max_iter=0.
 
         Parameters
         ----------
@@ -467,6 +517,8 @@ class GMM(BaseEstimator):
                 'GMM estimation with %s components, but got only %s samples' %
                 (self.n_components, X.shape[0]))
 
+        self.random_state_ = check_random_state(self.random_state)
+
         max_log_prob = -np.infty
 
         if self.verbose > 0:
@@ -480,7 +532,7 @@ class GMM(BaseEstimator):
             if 'm' in self.init_params or not hasattr(self, 'means_'):
                 self.means_ = cluster.KMeans(
                     n_clusters=self.n_components,
-                    random_state=self.random_state).fit(X).cluster_centers_
+                    random_state=self.random_state_).fit(X).cluster_centers_
                 if self.verbose > 1:
                     print('\tMeans have been initialized.')
 
@@ -491,7 +543,7 @@ class GMM(BaseEstimator):
                     print('\tWeights have been initialized.')
 
             if 'c' in self.init_params or not hasattr(self, 'covars_'):
-                cv = np.cov(X.T) + self.min_covar * np.eye(X.shape[1])
+                cv = np.cov(X.T) + self.reg_covar * np.eye(X.shape[1])
                 if not cv.shape:
                     cv.shape = (1, 1)
                 self.covars_ = \
@@ -505,7 +557,7 @@ class GMM(BaseEstimator):
             # reset self.converged_ to False
             self.converged_ = False
 
-            for i in range(self.n_iter):
+            for i in range(self.max_iter):
                 if self.verbose > 0:
                     print('\tEM iteration ' + str(i + 1))
                     start_iter_time = time()
@@ -527,13 +579,13 @@ class GMM(BaseEstimator):
 
                 # Maximization step
                 self._do_mstep(X, responsibilities, self.params,
-                               self.min_covar)
+                               self.reg_covar)
                 if self.verbose > 1:
                     print('\t\tEM iteration ' + str(i + 1) + ' took {0:.5f}s'.format(
                         time() - start_iter_time))
 
             # if the results are better, keep it
-            if self.n_iter:
+            if self.max_iter:
                 if current_log_likelihood > max_log_prob:
                     max_log_prob = current_log_likelihood
                     best_params = {'weights': self.weights_,
@@ -548,17 +600,17 @@ class GMM(BaseEstimator):
 
         # check the existence of an init param that was not subject to
         # likelihood computation issue.
-        if np.isneginf(max_log_prob) and self.n_iter:
+        if np.isneginf(max_log_prob) and self.max_iter:
             raise RuntimeError(
                 "EM algorithm was never able to compute a valid likelihood " +
                 "given initial parameters. Try different init parameters " +
                 "(or increasing n_init) or check for degenerate data.")
 
-        if self.n_iter:
+        if self.max_iter:
             self.covars_ = best_params['covars']
             self.means_ = best_params['means']
             self.weights_ = best_params['weights']
-        else:  # self.n_iter == 0 occurs when using GMM within HMM
+        else:  # self.max_iter == 0 occurs when using GMM within HMM
             # Need to make sure that there are responsibilities to output
             # Output zeros because it was just a quick initialization
             responsibilities = np.zeros((X.shape[0], self.n_components))
@@ -572,7 +624,7 @@ class GMM(BaseEstimator):
         expectation-maximization (EM) algorithm. If you want to avoid
         this step, set the keyword argument init_params to the empty
         string '' when creating the GMM object. Likewise, if you would
-        like just to do an initialization, set n_iter=0.
+        like just to do an initialization, set max_iter=0.
 
         Parameters
         ----------
@@ -587,7 +639,7 @@ class GMM(BaseEstimator):
         self._fit(X, y)
         return self
 
-    def _do_mstep(self, X, responsibilities, params, min_covar=0):
+    def _do_mstep(self, X, responsibilities, params, reg_covar=0):
         """ Perform the Mstep of the EM algorithm and return the class weights
         """
         weights = responsibilities.sum(axis=0)
@@ -602,7 +654,7 @@ class GMM(BaseEstimator):
             covar_mstep_func = _covar_mstep_funcs[self.covariance_type]
             self.covars_ = covar_mstep_func(
                 self, X, responsibilities, weighted_X_sum, inverse_weights,
-                min_covar)
+                reg_covar)
         return weights
 
     def _n_parameters(self):
@@ -680,7 +732,7 @@ def _log_multivariate_normal_density_tied(X, means, covars):
     return _log_multivariate_normal_density_full(X, means, cv)
 
 
-def _log_multivariate_normal_density_full(X, means, covars, min_covar=1.e-7):
+def _log_multivariate_normal_density_full(X, means, covars, reg_covar=1.e-7):
     """Log probability for full covariance matrices."""
     n_samples, n_dim = X.shape
     nmix = len(means)
@@ -692,7 +744,7 @@ def _log_multivariate_normal_density_full(X, means, covars, min_covar=1.e-7):
             # The model is most probably stuck in a component with too
             # few observations, we need to reinitialize this components
             try:
-                cv_chol = linalg.cholesky(cv + min_covar * np.eye(n_dim),
+                cv_chol = linalg.cholesky(cv + reg_covar * np.eye(n_dim),
                                           lower=True)
             except linalg.LinAlgError:
                 raise ValueError("'covars' must be symmetric, "
@@ -764,12 +816,12 @@ def distribute_covar_matrix_to_match_covariance_type(
 
 
 def _covar_mstep_diag(gmm, X, responsibilities, weighted_X_sum, norm,
-                      min_covar):
+                      reg_covar):
     """Performing the covariance M step for diagonal cases"""
     avg_X2 = np.dot(responsibilities.T, X * X) * norm
     avg_means2 = gmm.means_ ** 2
     avg_X_means = gmm.means_ * weighted_X_sum * norm
-    return avg_X2 - 2 * avg_X_means + avg_means2 + min_covar
+    return avg_X2 - 2 * avg_X_means + avg_means2 + reg_covar
 
 
 def _covar_mstep_spherical(*args):
@@ -779,7 +831,7 @@ def _covar_mstep_spherical(*args):
 
 
 def _covar_mstep_full(gmm, X, responsibilities, weighted_X_sum, norm,
-                      min_covar):
+                      reg_covar):
     """Performing the covariance M step for full cases"""
     # Eq. 12 from K. Murphy, "Fitting a Conditional Linear Gaussian
     # Distribution"
@@ -792,19 +844,19 @@ def _covar_mstep_full(gmm, X, responsibilities, weighted_X_sum, norm,
         with np.errstate(under='ignore'):
             # Underflow Errors in doing post * X.T are  not important
             avg_cv = np.dot(post * diff.T, diff) / (post.sum() + 10 * EPS)
-        cv[c] = avg_cv + min_covar * np.eye(n_features)
+        cv[c] = avg_cv + reg_covar * np.eye(n_features)
     return cv
 
 
 def _covar_mstep_tied(gmm, X, responsibilities, weighted_X_sum, norm,
-                      min_covar):
+                      reg_covar):
     # Eq. 15 from K. Murphy, "Fitting a Conditional Linear Gaussian
     # Distribution"
     avg_X2 = np.dot(X.T, X)
     avg_means2 = np.dot(gmm.means_.T, weighted_X_sum)
     out = avg_X2 - avg_means2
     out *= 1. / X.shape[0]
-    out.flat[::len(out) + 1] += min_covar
+    out.flat[::len(out) + 1] += reg_covar
     return out
 
 _covar_mstep_funcs = {'spherical': _covar_mstep_spherical,

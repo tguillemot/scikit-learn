@@ -365,14 +365,6 @@ cdef int free_tree(Tree* tree) nogil:
     for i in range(3):
         cnt[i] = 0
     free_recursive(tree, tree.root_node, cnt)
-    if not tree.root_node.is_leaf:
-        free(tree.root_node.children)
-    free(tree.root_node.width)
-    free(tree.root_node.left_edge)
-    free(tree.root_node.center)
-    free(tree.root_node.barycenter)
-    free(tree.root_node.leaf_point_position)
-    free(tree.root_node)
     check = cnt[0] == tree.n_cells
     check &= cnt[2] == tree.n_points
     free(tree)

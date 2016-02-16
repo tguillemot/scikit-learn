@@ -76,9 +76,11 @@ elif [[ "$DISTRIB" == "ubuntu" ]]; then
     pip install nose nose-timer cython
 
 elif [[ "$DISTRIB" == "scipy-dev-wheels" ]]; then
-    # Set up our own virtualenv environment to avoid travis' numpy
-    virtualenv --python=python ~/venv
-    source ~/venv/bin/activate
+    # Set up our own virtualenv environment to avoid travis' numpy.
+    # This venv points to the python interpreter of the travis build
+    # matrix.
+    virtualenv --python=python ~/testvenv
+    source ~/testvenv/bin/activate
     pip install --upgrade pip setuptools
 
     # We use the default Python virtualenv provided by travis
@@ -87,9 +89,6 @@ elif [[ "$DISTRIB" == "scipy-dev-wheels" ]]; then
         --trusted-host travis-dev-wheels.scipy.org \
         -f https://travis-dev-wheels.scipy.org/ numpy scipy
     pip install nose nose-timer cython
-
-    # Install nose-timer via pip
-    pip install nose-timer
 fi
 
 if [[ "$COVERAGE" == "true" ]]; then

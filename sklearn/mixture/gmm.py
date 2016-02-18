@@ -8,16 +8,18 @@ of Gaussian Mixture Models.
 # Author: Ron Weiss <ronweiss@gmail.com>
 #         Fabian Pedregosa <fabian.pedregosa@inria.fr>
 #         Bertrand Thirion <bertrand.thirion@inria.fr>
+#         Wei Xue <xuewei4d@gmail.com>
 
-import warnings
 import numpy as np
 from scipy import linalg
 from time import time
+from abc import ABCMeta, abstractmethod
 
-from ..base import BaseEstimator
+from ..base import BaseEstimator, DensityMixin
 from ..utils import check_random_state, check_array
 from ..utils.extmath import logsumexp
 from ..utils.validation import check_is_fitted
+from ..externals import six
 from .. import cluster
 
 from sklearn.externals.six.moves import zip
@@ -112,7 +114,157 @@ def sample_gaussian(mean, covar, covariance_type='diag', n_samples=1,
     return (rand.T + mean).T
 
 
-class GMM(BaseEstimator):
+def _check_X(X, n_components=None, n_features=None):
+    """Check the input data X.
+
+    Parameters
+    ----------
+    X : array-like, (n_samples, n_features)
+
+    n_components : int
+
+    Returns
+    -------
+    X : array, (n_samples, n_features)
+    """
+    X = check_array(X, dtype=[np.float64, np.float32], ensure_2d=False)
+    if X.ndim != 2:
+        raise ValueError("Expected the input data X have 2 dimensions, "
+                         "but got %s dimension(s)" %
+                         X.ndim)
+    if n_components is not None and X.shape[0] < n_components:
+        raise ValueError('Expected n_samples >= n_components'
+                         'but got n_components = %d, n_samples = %d'
+                         % (n_components, X.shape[0]))
+    if n_features is not None and X.shape[1] != n_features:
+        raise ValueError("Expected the input data X have %d features, "
+                         "but got %d features"
+                         % (n_features, X.shape[1]))
+    return X
+
+
+class _MixtureBase(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
+    """Base class for mixture models.
+
+    This abstract class specifies the interface by abstract methods and
+    provides basic common methods for mixture models.
+    """
+    def __init__(self, n_components, covariance_type, tol, reg_covar,
+                 max_iter, n_init, init_params, random_state, verbose):
+        self.n_components = n_components
+        self.covariance_type = covariance_type
+        self.tol = tol
+        self.reg_covar = reg_covar
+        self.random_state = random_state
+        self.max_iter = max_iter
+        self.n_init = n_init
+        self.init_params = init_params
+        self.verbose = verbose
+
+        self.n_features_ = None
+        self.converged_ = False
+
+        if n_init < 1:
+            raise ValueError("Invalid value for 'n_init': %d "
+                             "Estimation requires at least one run" % n_init)
+
+        if covariance_type not in ['spherical', 'tied', 'diag', 'full']:
+                raise ValueError("Invalid value for 'covariance_type': %s "
+                                 "'covariance_type' should be in "
+                                 "['spherical', 'tied', 'diag', 'full']"
+                                 % covariance_type)
+
+    @abstractmethod
+    def _m_step(self, X, resp):
+        """M step
+
+        Parameters
+        ----------
+        X : array-like, shape = (n_samples, n_features)
+        """
+
+    @abstractmethod
+    def _e_step(self, X):
+        """E Step
+
+        Parameters
+        ----------
+        X : array-like, shape = (n_samples, n_features)
+
+        Returns
+        -------
+        log_likelihood : float
+
+        resp : array-like, shape = (n_samples, n_components)
+        """
+
+    def fit(self, X, y=None):
+        """Estimate model parameters with the EM algorithm.
+
+        A initialization step is performed before entering the
+        expectation-maximization (EM) algorithm. If you want to avoid
+        this step, set the keyword argument init_params to the empty
+        string '' when creating the GMM object. Likewise, if you would
+        like just to do an initialization, set max_iter=0.
+
+        Parameters
+        ----------
+        X : array_like, shape (n, n_features)
+            List of n_features-dimensional data points.  Each row
+            corresponds to a single data point.
+
+        Returns
+        -------
+        self
+        """
+        X = _check_X(X, self.n_components)
+        self.n_features_ = X.shape[1]
+        self._fit(X, y)
+        return self
+
+    def _n_parameters(self):
+        """Return the number of free parameters in the model."""
+        ndim = self.means_.shape[1]
+        if self.covariance_type == 'full':
+            cov_params = self.n_components * ndim * (ndim + 1) / 2.
+        elif self.covariance_type == 'diag':
+            cov_params = self.n_components * ndim
+        elif self.covariance_type == 'tied':
+            cov_params = ndim * (ndim + 1) / 2.
+        elif self.covariance_type == 'spherical':
+            cov_params = self.n_components
+        mean_params = ndim * self.n_components
+        return int(cov_params + mean_params + self.n_components - 1)
+
+    def bic(self, X):
+        """Bayesian information criterion for the current model on the input X.
+
+        Parameters
+        ----------
+        X : array of shape(n_samples, n_dimensions)
+
+        Returns
+        -------
+        bic: float (the greater the better)
+        """
+        return (-2 * self.score(X) * X.shape[0] +
+                self._n_parameters() * np.log(X.shape[0]))
+
+    def aic(self, X):
+        """Akaike information criterion for the current model on the input X.
+
+        Parameters
+        ----------
+        X : array of shape(n_samples, n_dimensions)
+
+        Returns
+        -------
+        aic: float (the greater the better)
+        """
+        return -2 * self.score(X) * X.shape[0] + 2 * self._n_parameters()
+
+
+class GMM(_MixtureBase):
     """Gaussian Mixture Model.
 
     Representation of a Gaussian mixture model probability distribution.
@@ -234,34 +386,19 @@ class GMM(BaseEstimator):
     array([ 0.5,  0.5])
 
     """
-
     def __init__(self, n_components=1, covariance_type='diag',
                  random_state=None, tol=1e-3, min_covar=1e-3,
                  n_iter=100, n_init=1, params='wmc', init_params='wmc',
                  verbose=0):
-        self.n_components = n_components
-        self.covariance_type = covariance_type
-        self.tol = tol
-        self.min_covar = min_covar
-        self.random_state = random_state
-        self.n_iter = n_iter
-        self.n_init = n_init
+        super(GMM, self).__init__(
+            n_components=n_components, covariance_type=covariance_type,
+            random_state=random_state, tol=tol, reg_covar=min_covar,
+            max_iter=n_iter, n_init=n_init, init_params=init_params,
+            verbose=verbose)
+
         self.params = params
-        self.init_params = init_params
-        self.verbose = verbose
-
-        if covariance_type not in ['spherical', 'tied', 'diag', 'full']:
-            raise ValueError('Invalid value for covariance_type: %s' %
-                             covariance_type)
-
-        if n_init < 1:
-            raise ValueError('GMM estimation requires at least one run')
 
         self.weights_ = np.ones(self.n_components) / self.n_components
-
-        # flag to indicate exit status of fit() method: converged (True) or
-        # n_iter reached (False)
-        self.converged_ = False
 
     def _get_covars(self):
         """Covariance parameters for each mixture component.
@@ -288,6 +425,22 @@ class GMM(BaseEstimator):
         covars = np.asarray(covars)
         _validate_covars(covars, self.covariance_type, self.n_components)
         self.covars_ = covars
+
+    @property
+    def min_covar(self):
+        return self.reg_covar
+
+    @min_covar.setter
+    def min_covar(self, value):
+        self.reg_covar = value
+
+    @property
+    def n_iter(self):
+        return self.max_iter
+
+    @n_iter.setter
+    def n_iter(self, value):
+        self.max_iter = value
 
     def score_samples(self, X):
         """Return the per-sample likelihood of the data under the model.
@@ -511,7 +664,7 @@ class GMM(BaseEstimator):
                     start_iter_time = time()
                 prev_log_likelihood = current_log_likelihood
                 # Expectation step
-                log_likelihoods, responsibilities = self.score_samples(X)
+                log_likelihoods, responsibilities = self._e_step(X)
                 current_log_likelihood = log_likelihoods.mean()
 
                 # Check for convergence.
@@ -526,11 +679,10 @@ class GMM(BaseEstimator):
                         break
 
                 # Maximization step
-                self._do_mstep(X, responsibilities, self.params,
-                               self.min_covar)
+                self._m_step(X, responsibilities)
                 if self.verbose > 1:
-                    print('\t\tEM iteration ' + str(i + 1) + ' took {0:.5f}s'.format(
-                        time() - start_iter_time))
+                    print('\t\tEM iteration ' + str(i + 1) +
+                          ' took {0:.5f}s'.format(time() - start_iter_time))
 
             # if the results are better, keep it
             if self.n_iter:
@@ -543,8 +695,8 @@ class GMM(BaseEstimator):
                         print('\tBetter parameters were found.')
 
             if self.verbose > 1:
-                print('\tInitialization ' + str(init + 1) + ' took {0:.5f}s'.format(
-                    time() - start_init_time))
+                print('\tInitialization ' + str(init + 1) +
+                      ' took {0:.5f}s'.format(time() - start_init_time))
 
         # check the existence of an init param that was not subject to
         # likelihood computation issue.
@@ -565,59 +717,27 @@ class GMM(BaseEstimator):
 
         return responsibilities
 
-    def fit(self, X, y=None):
-        """Estimate model parameters with the EM algorithm.
-
-        A initialization step is performed before entering the
-        expectation-maximization (EM) algorithm. If you want to avoid
-        this step, set the keyword argument init_params to the empty
-        string '' when creating the GMM object. Likewise, if you would
-        like just to do an initialization, set n_iter=0.
-
-        Parameters
-        ----------
-        X : array_like, shape (n, n_features)
-            List of n_features-dimensional data points.  Each row
-            corresponds to a single data point.
-
-        Returns
-        -------
-        self
-        """
-        self._fit(X, y)
-        return self
-
-    def _do_mstep(self, X, responsibilities, params, min_covar=0):
+    def _m_step(self, X, responsibilities):
         """Perform the Mstep of the EM algorithm and return the cluster weights.
         """
         weights = responsibilities.sum(axis=0)
         weighted_X_sum = np.dot(responsibilities.T, X)
         inverse_weights = 1.0 / (weights[:, np.newaxis] + 10 * EPS)
 
-        if 'w' in params:
+        if 'w' in self.params:
             self.weights_ = (weights / (weights.sum() + 10 * EPS) + EPS)
-        if 'm' in params:
+        if 'm' in self.params:
             self.means_ = weighted_X_sum * inverse_weights
-        if 'c' in params:
+        if 'c' in self.params:
             covar_mstep_func = _covar_mstep_funcs[self.covariance_type]
             self.covars_ = covar_mstep_func(
                 self, X, responsibilities, weighted_X_sum, inverse_weights,
-                min_covar)
+                self.min_covar)
         return weights
 
-    def _n_parameters(self):
-        """Return the number of free parameters in the model."""
-        ndim = self.means_.shape[1]
-        if self.covariance_type == 'full':
-            cov_params = self.n_components * ndim * (ndim + 1) / 2.
-        elif self.covariance_type == 'diag':
-            cov_params = self.n_components * ndim
-        elif self.covariance_type == 'tied':
-            cov_params = ndim * (ndim + 1) / 2.
-        elif self.covariance_type == 'spherical':
-            cov_params = self.n_components
-        mean_params = ndim * self.n_components
-        return int(cov_params + mean_params + self.n_components - 1)
+    def _e_step(self, X):
+        log_likelihoods, responsibilities = self.score_samples(X)
+        return log_likelihoods, responsibilities
 
     def bic(self, X):
         """Bayesian information criterion for the current model fit
@@ -631,8 +751,7 @@ class GMM(BaseEstimator):
         -------
         bic: float (the lower the better)
         """
-        return (-2 * self.score(X).sum() +
-                self._n_parameters() * np.log(X.shape[0]))
+        return super(GMM, self).bic(X).sum() / X.shape[0]
 
     def aic(self, X):
         """Akaike information criterion for the current model fit
@@ -646,8 +765,7 @@ class GMM(BaseEstimator):
         -------
         aic: float (the lower the better)
         """
-        return - 2 * self.score(X).sum() + 2 * self._n_parameters()
-
+        return super(GMM, self).aic(X).sum() / X.shape[0]
 
 #########################################################################
 # some helper routines

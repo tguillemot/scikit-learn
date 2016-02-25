@@ -8,8 +8,6 @@ from .gmm import _validate_covars
 from .dpgmm import DPGMM, VBGMM
 
 from .gaussian_mixture import GaussianMixture
-from .bayesian_mixture import BayesianGaussianMixture
-from .dp_gaussian_mixture import DirichletProcessGaussianMixture
 
 
 __all__ = ['DPGMM',
@@ -19,6 +17,4 @@ __all__ = ['DPGMM',
            'distribute_covar_matrix_to_match_covariance_type',
            'log_multivariate_normal_density',
            'sample_gaussian',
-           'GaussianMixture',
-           'BayesianGaussianMixture',
-           'DirichletProcessGaussianMixture']
+           'GaussianMixture']

@@ -117,11 +117,10 @@ class MixtureBase(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         self.verbose = verbose
         self.verbose_interval = verbose_interval
 
+        self.converged_ = False
         self.n_iter_ = 0
         self.n_features = None
-        self.converged_ = False
-
-        self._started = False
+        self.started_ = False
 
     def _check_parameters_values(self):
         if self.n_init < 1:
@@ -178,7 +177,7 @@ class MixtureBase(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         -------
         weighted_log_prob : array, shape = (n_features, n_component)
         """
-        return self._estimate_log_weights() + self._estimate_log_prob(X)
+        return self._estimate_log_prob(X) + self._estimate_log_weights()
 
     def _estimate_log_prob_resp(self, X):
         """Estimate log probabilities responsibilities for each sample.
@@ -234,12 +233,11 @@ class MixtureBase(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         self._check_initial_parameters()
 
         max_log_likelihood = -np.infty
-        best_params = self._get_parameters()
 
         if self.verbose > 10:
             self._log_snapshot = []
 
-        do_init = not(self.warm_start and self._started)
+        do_init = not(self.warm_start and self.started_)
         n_init = self.n_init if do_init else 1
 
         for init in range(n_init):
@@ -248,7 +246,7 @@ class MixtureBase(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
 
             if do_init:
                 self._initialize(X)
-                self._started = True
+                self.started_ = True
 
             current_log_likelihood = -np.infty
             self.converged_ = False

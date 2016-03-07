@@ -10,18 +10,6 @@ from ..utils import check_array
 from ..utils.validation import check_is_fitted
 
 
-def _define_parameter_shape(n_components, n_features, covariance_type):
-    """Define the shape of the parameters."""
-    cov_shape = {'full': (n_components, n_features, n_features),
-                 'tied': (n_features, n_features),
-                 'diag': (n_components, n_features),
-                 'spherical': (n_components,)}
-    param_shape = {'weights': (n_components,),
-                   'means': (n_components, n_features),
-                   'covariances': cov_shape[covariance_type]}
-    return param_shape
-
-
 def _check_means(means, desired_shape):
     """Validate the user provided 'means'.
 
@@ -358,13 +346,9 @@ class GaussianMixture(MixtureBase):
             init_params=init_params, warm_start=warm_start,
             verbose=verbose, verbose_interval=verbose_interval)
         self.covariance_type = covariance_type
-
         self.weights_init = weights
-        self.weights_ = None
         self.means_init = means
-        self.means_ = None
         self.covars_init = covars
-        self.covars_ = None
 
     def _check_parameters_values(self):
         super(GaussianMixture, self)._check_parameters_values()
@@ -375,13 +359,26 @@ class GaussianMixture(MixtureBase):
                                  "['spherical', 'tied', 'diag', 'full']"
                                  % self.covariance_type)
 
+    def _define_parameter_shape(self):
+        """Define the shape of the parameters."""
+        cov_shape = {'full': (self.n_components, self.n_features,
+                              self.n_features),
+                     'tied': (self.n_features, self.n_features),
+                     'diag': (self.n_components, self.n_features),
+                     'spherical': (self.n_components,)}
+
+        param_shape = {'weights': (self.n_components,),
+                       'means': (self.n_components, self.n_features),
+                       'covariances': cov_shape[self.covariance_type]}
+
+        return param_shape
+
     def _estimate_suffstat(self, X, resp):
         return _estimate_gaussian_suffstat(X, resp, self.reg_covar,
                                            self.covariance_type)
 
     def _check_initial_parameters(self):
-        param_shape = _define_parameter_shape(
-            self.n_components, self.n_features, self.covariance_type)
+        param_shape = self._define_parameter_shape()
 
         if self.weights_init is not None:
             self.weights_init = check_weights(
@@ -416,18 +413,18 @@ class GaussianMixture(MixtureBase):
     def _estimate_covariances(self, Sk):
         return Sk
 
-    def _m_step(self, X, resp):
-        nk, xk, Sk = self._estimate_suffstat(X, resp)
-        self.weights_ = self._estimate_weights(X, nk)
-        self.means_ = self._estimate_means(xk)
-        self.covars_ = self._estimate_covariances(Sk)
-
     def _estimate_log_weights(self):
         return np.log(self.weights_)
 
     def _estimate_log_prob(self, X):
         return _estimate_log_gaussian_prob(X, self.means_, self.covars_,
                                            self.covariance_type)
+
+    def _m_step(self, X, resp):
+        nk, xk, Sk = self._estimate_suffstat(X, resp)
+        self.weights_ = self._estimate_weights(X, nk)
+        self.means_ = self._estimate_means(xk)
+        self.covars_ = self._estimate_covariances(Sk)
 
     def _e_step(self, X):
         log_prob_norm, _, resp, _ = self._estimate_log_prob_resp(X)

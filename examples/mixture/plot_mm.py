@@ -56,24 +56,24 @@ gm = mixture.GaussianMixture(n_components=5, covariance_type='full',
                              reg_covar=0, init_params='kmeans')
 gm.fit(X)
 
-# Fit a mixture of Bayesian Gaussians with variational inference
-bgm = mixture.BayesianGaussianMixture(n_components=5, precision_type='full',
-                                      reg_covar=0, init_params='random',
-                                      alpha_prior=1e-2)
-bgm.fit(X)
+# # Fit a mixture of Bayesian Gaussians with variational inference
+# bgm = mixture.BayesianGaussianMixture(n_components=5, precision_type='full',
+#                                       reg_covar=0, init_params='random',
+#                                       alpha_prior=1e-2)
+# bgm.fit(X)
 
-# Fit a Dirichlet process mixture of Gaussians with variational inference
-dpgm = mixture.DirichletProcessGaussianMixture(n_components=5,
-                                               precision_type='full',
-                                               init_params='random',
-                                               gamma_prior=1e-2)
-dpgm.fit(X)
+# # Fit a Dirichlet process mixture of Gaussians with variational inference
+# dpgm = mixture.DirichletProcessGaussianMixture(n_components=5,
+#                                                precision_type='full',
+#                                                init_params='random',
+#                                                gamma_prior=1e-2)
+# dpgm.fit(X)
 
 color_iter = itertools.cycle(['r', 'g', 'b', 'c', 'm'])
 
-for i, (clf, title) in enumerate([(gm, 'GM'),
-                                  (bgm, 'BGM'),
-                                  (dpgm, 'DPGM')]):
+for i, (clf, title) in enumerate([(gm, 'GM')]):
+                                    # (bgm, 'BGM'),
+                                    # (dpgm, 'DPGM')]):
     splot = plt.subplot(3, 1, 1 + i)
     Y_ = clf.predict(X)
     for i, (mean, covar, color) in enumerate(zip(

@@ -225,7 +225,7 @@ components on a dataset composed of 2 clusters. We can see that the DPGMM is
 able to limit itself to only 2 components whereas the GMM fits the data fit too
 many components. Note that with very little observations, the DPGMM can take a
 conservative stand, and fit only one component. **On the right** we are fitting
-a dataset not well-depicted by a mixture of Gaussian. Adjusting the `alpha`
+a dataset not well-depicted by a Gaussian mixture. Adjusting the `alpha`
 parameter of the DPGMM controls the number of components used to fit this
 data.
 

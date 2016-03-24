@@ -1,7 +1,7 @@
 """
-=============================================
-Density Estimation for a mixture of Gaussians
-=============================================
+=========================================
+Density Estimation for a Gaussian mixture
+=========================================
 
 Plot the density estimation of a mixture of two Gaussians. Data is
 generated from two Gaussians with different centers and covariance

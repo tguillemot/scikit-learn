@@ -141,10 +141,6 @@ def _check_covariances(covariances, covariances_shape, covariance_type):
         'diag' : shape of (n_components, n_features)
         'spherical' : shape of (n_components,)
 
-    n_components : int
-
-    n_features : int
-
     covariance_type : string
 
     Returns
@@ -155,8 +151,8 @@ def _check_covariances(covariances, covariances_shape, covariance_type):
                               "tied": _check_covariances_tied,
                               "diag": _check_covariances_diag,
                               "spherical": _check_covariances_spherical}
-    return check_covars_functions[covariance_type](
-        covariances, covariances_shape)
+    return check_covars_functions[covariance_type](covariances,
+                                                   covariances_shape)
 
 
 ###############################################################################
@@ -208,7 +204,7 @@ def _estimate_gaussian_covariance_tied(resp, X, nk, means, reg_covar):
 
     Returns
     -------
-    Sk : array, shape (n_components, n_features)
+    covariances : array, shape (n_features, n_features)
     """
     avg_X2 = np.dot(X.T, X)
     avg_means2 = np.dot(nk * means.T, means)
@@ -235,7 +231,7 @@ def _estimate_gaussian_covariance_diag(resp, X, nk, means, reg_covar):
 
     Returns
     -------
-    Sk : array, shape (n_components, n_features)
+    covariances : array, shape (n_components, n_features)
     """
     avg_X2 = np.dot(resp.T, X * X) / nk[:, np.newaxis]
     avg_means2 = means ** 2
@@ -260,7 +256,7 @@ def _estimate_gaussian_covariance_spherical(resp, X, nk, means, reg_covar):
 
     Returns
     -------
-    Sk : array, shape (n_components,)
+    covariances : array, shape (n_components,)
     """
     covariances = _estimate_gaussian_covariance_diag(resp, X, nk, means,
                                                      reg_covar)
@@ -284,7 +280,6 @@ def _estimate_gaussian_parameters(X, resp, reg_covar, covariance_type):
     covariance_type : {'full', 'tied', 'diag', 'spherical'}
         The type of covariance matrices.
 
-
     Returns
     -------
     nk : array, shape (n_components,)
@@ -295,6 +290,7 @@ def _estimate_gaussian_parameters(X, resp, reg_covar, covariance_type):
 
     covariances : array
         The sample covariances of the current components.
+        The shape depends of the covariance_type.
     """
     compute_covariance = {
         "full": _estimate_gaussian_covariance_full,
@@ -526,9 +522,6 @@ class GaussianMixture(BaseMixture):
         True when convergence was reached in fit(), False otherwise.
         `converged_` will not exist before a call to fit.
 
-    initialized_ : bool
-        True when fit() has been applied at least once, False otherwise.
-        `initialized_` will not exist before a call to fit.
     """
 
     def __init__(self, n_components=1, covariance_type='full',
@@ -585,7 +578,7 @@ class GaussianMixture(BaseMixture):
                 self.covariance_type)
 
     def _initialize(self, X, resp):
-        """Initialization of the Gaussian mixtures parameters.
+        """Initialization of the Gaussian mixture parameters.
 
         Parameters
         ----------
@@ -652,7 +645,7 @@ class GaussianMixture(BaseMixture):
 
         Parameters
         ----------
-        X : array of shape(n_samples, n_dimensions)
+        X : array of shape (n_samples, n_dimensions)
 
         Returns
         -------

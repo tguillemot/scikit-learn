@@ -15,8 +15,6 @@ In that case, the model with 2 components and full covariance
 (which corresponds to the true generative model) is selected.
 """
 
-# Modified by Thierry Guillemot <thierry.guillemot.work@gmail.com>
-
 import numpy as np
 import itertools
 
@@ -43,7 +41,7 @@ n_components_range = range(1, 7)
 cv_types = ['spherical', 'tied', 'diag', 'full']
 for cv_type in cv_types:
     for n_components in n_components_range:
-        # Fit a mixture of Gaussians with EM
+        # Fit a Gaussian mixture with EM
         gmm = mixture.GaussianMixture(n_components=n_components,
                                       covariance_type=cv_type)
         gmm.fit(X)

@@ -181,7 +181,7 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         max_log_likelihood = -np.infty
 
         # if we enable warm_start, we will have a unique init
-        do_init = not(self.warm_start and hasattr(self, 'initialized_'))
+        do_init = not(self.warm_start and hasattr(self, 'means_'))
         n_init = self.n_init if do_init else 1
 
         for init in range(n_init):
@@ -190,7 +190,6 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
 
             if do_init:
                 self._initialize_parameters(X)
-                self.initialized_ = True
 
             current_log_likelihood = -np.infty
 
@@ -275,11 +274,13 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         Parameters
         ----------
         X : array-like, shape (n_samples, n_features)
+            List of n_features-dimensional data points. Each row
+            corresponds to a single data point.
 
         Returns
         -------
         log_prob : array, shape (n_samples,)
-            log probabilities
+            Log probabilities of each data point in X.
         """
         self._check_is_fitted()
         X = _check_X(X, None, self.means_.shape[1])
@@ -292,10 +293,13 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         Parameters
         ----------
         X : array-like, shape (n_samples, n_dimensions)
+            List of n_features-dimensional data points. Each row
+            corresponds to a single data point.
 
         Returns
         -------
         log_likelihood : float
+            Log likelihood of the Gaussian mixture given X.
         """
         p = self.score_samples(X)
         return p.mean()
@@ -306,10 +310,13 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         Parameters
         ----------
         X : array-like, shape (n_samples, n_features)
+            List of n_features-dimensional data points. Each row
+            corresponds to a single data point.
 
         Returns
         -------
-        labels : array, shape (n_samples,) component labels
+        labels : array, shape (n_samples,)
+            Component labels.
         """
         self._check_is_fitted()
         X = _check_X(X, None, self.means_.shape[1])
@@ -321,10 +328,14 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         Parameters
         ----------
         X : array-like, shape (n_samples, n_features)
+            List of n_features-dimensional data points. Each row
+            corresponds to a single data point.
 
         Returns
         -------
         resp : array, shape (n_samples, n_components)
+            Returns the probability of the sample for each Gaussian
+            (state) in the model.
         """
         self._check_is_fitted()
         X = _check_X(X, None, self.means_.shape[1])

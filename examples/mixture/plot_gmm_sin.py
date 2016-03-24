@@ -69,20 +69,20 @@ for i in range(X.shape[0]):
     X[i, 0] = x + np.random.normal(0, 0.1)
     X[i, 1] = 3. * (np.sin(x) + np.random.normal(0, .2))
 
-# Fit a mixture of Gaussians with EM using ten components
+# Fit a Gaussian mixture with EM using ten components
 gmm = mixture.GaussianMixture(n_components=10, covariance_type='full',
                               max_iter=100).fit(X)
 plot_results(X, gmm.predict(X), gmm.means_, gmm.covariances_, 0,
              'Expectation-maximization')
 
-# Fit a Dirichlet process mixture of Gaussians using ten components
+# Fit a Dirichlet process Gaussian mixture using ten components
 dpgmm = mixture.DPGMM(n_components=10, covariance_type='full', alpha=0.01,
                       n_iter=100).fit(X)
 plot_results(X, dpgmm.predict(X), dpgmm.means_, dpgmm._get_covars(), 1,
              'Dirichlet Process,alpha=0.01')
 
 
-# Fit a Dirichlet process mixture of Gaussians using ten components
+# Fit a Dirichlet process Gaussian mixture using ten components
 dpgmm = mixture.DPGMM(n_components=10, covariance_type='diag', alpha=100.,
                       n_iter=100).fit(X)
 plot_results(X, dpgmm.predict(X), dpgmm.means_, dpgmm._get_covars(), 2,

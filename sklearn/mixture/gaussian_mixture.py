@@ -530,7 +530,7 @@ class GaussianMixture(BaseMixture):
                  random_state=None, warm_start=False,
                  verbose=0, verbose_interval=10):
         super(GaussianMixture, self).__init__(
-            n_components=n_components,  tol=tol, reg_covar=reg_covar,
+            n_components=n_components, tol=tol, reg_covar=reg_covar,
             max_iter=max_iter, n_init=n_init, init_params=init_params,
             random_state=random_state, warm_start=warm_start,
             verbose=verbose, verbose_interval=verbose_interval)

@@ -524,16 +524,14 @@ class GaussianMixture(BaseMixture):
 
     """
 
-    def __init__(self, n_components=1, covariance_type='full',
-                 tol=1e-6, reg_covar=0., max_iter=100,
-                 n_init=1, init_params='kmeans',
+    def __init__(self, n_components=1, covariance_type='full', tol=1e-6,
+                 reg_covar=0., max_iter=100, n_init=1, init_params='kmeans',
                  weights_init=None, means_init=None, covariances_init=None,
                  random_state=None, warm_start=False,
                  verbose=0, verbose_interval=10):
         super(GaussianMixture, self).__init__(
-            n_components=n_components,  tol=tol,
-            reg_covar=reg_covar, max_iter=max_iter,
-            n_init=n_init, init_params=init_params,
+            n_components=n_components,  tol=tol, reg_covar=reg_covar,
+            max_iter=max_iter, n_init=n_init, init_params=init_params,
             random_state=random_state, warm_start=warm_start,
             verbose=verbose, verbose_interval=verbose_interval)
 

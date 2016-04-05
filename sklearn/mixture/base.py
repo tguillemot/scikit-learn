@@ -177,12 +177,12 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         X = _check_X(X, self.n_components)
         self._check_initial_parameters(X)
 
-        self.converged_ = False
-        max_log_likelihood = -np.infty
-
         # if we enable warm_start, we will have a unique init
-        do_init = not(self.warm_start and hasattr(self, 'means_'))
+        do_init = not(self.warm_start and hasattr(self, 'converged_'))
         n_init = self.n_init if do_init else 1
+
+        max_log_likelihood = -np.infty
+        self.converged_ = False
 
         for init in range(n_init):
             # print verbose msg

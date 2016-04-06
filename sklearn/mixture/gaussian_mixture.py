@@ -563,6 +563,11 @@ class GaussianMixture(BaseMixture):
 
     n_iter_ : int
         Number of step used by the best fit of EM to reach the convergence.
+
+    See Also
+    --------
+    BayesianGaussianMixture : Finite gaussian mixture model fit with a
+        variational algorithm.
     """
 
     def __init__(self, n_components=1, covariance_type='full', tol=1e-3,

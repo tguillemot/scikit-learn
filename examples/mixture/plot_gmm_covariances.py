@@ -46,19 +46,19 @@ colors = ['navy', 'turquoise', 'darkorange']
 
 def make_ellipses(gmm, ax):
     for n, color in enumerate(colors):
-        if gmm.covariance_type == 'full':
-            covars = gmm.covariances_[n][:2, :2]
-        elif gmm.covariance_type == 'tied':
-            covars = gmm.covariances_[:2, :2]
-        elif gmm.covariance_type == 'diag':
-            covars = np.diag(gmm.covariances_[n][:2])
-        elif gmm.covariance_type == 'spherical':
-            covars = np.eye(gmm.means_.shape[1]) * gmm.covariances_[n]
+        if gmm.precision_type == 'full':
+            covars = gmm.precisions_[n][:2, :2]
+        elif gmm.precision_type == 'tied':
+            covars = gmm.precisions_[:2, :2]
+        elif gmm.precision_type == 'diag':
+            covars = np.diag(gmm.precisions_[n][:2])
+        elif gmm.precision_type == 'spherical':
+            covars = np.eye(gmm.means_.shape[1]) * gmm.precisions_[n]
         v, w = np.linalg.eigh(covars)
         u = w[0] / np.linalg.norm(w[0])
         angle = np.arctan2(u[1], u[0])
         angle = 180 * angle / np.pi  # convert to degrees
-        v = 2. * np.sqrt(2.) * np.sqrt(v)
+        v = 2. * np.sqrt(2.) * np.sqrt(1. / v)
         ell = mpl.patches.Ellipse(gmm.means_[n, :2], v[0], v[1],
                                   180 + angle, color=color)
         ell.set_clip_box(ax.bbox)
@@ -82,9 +82,9 @@ y_test = iris.target[test_index]
 n_classes = len(np.unique(y_train))
 
 # Try GMMs using different types of covariances.
-estimators = dict((covar_type, GaussianMixture(n_components=n_classes,
-                   covariance_type=covar_type, max_iter=20))
-                  for covar_type in ['spherical', 'diag', 'tied', 'full'])
+estimators = dict((prec_type, GaussianMixture(n_components=n_classes,
+                   precision_type=prec_type, max_iter=20))
+                  for prec_type in ['spherical', 'diag', 'tied', 'full'])
 
 n_estimators = len(estimators)
 

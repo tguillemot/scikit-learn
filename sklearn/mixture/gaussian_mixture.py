@@ -174,6 +174,7 @@ def _estimate_gaussian_precisions_full(resp, X, nk, means, reg_covar):
                              "increase reg_covar.")
         precisions[k] = linalg.solve_triangular(cov_chol, np.eye(n_features),
                                                 lower=True)
+    print(np.dot(precisions[0], precisions[0].T))
     return precisions
 
 
@@ -236,7 +237,7 @@ def _estimate_gaussian_precisions_diag(resp, X, nk, means, reg_covar):
     avg_X2 = np.dot(resp.T, X * X) / nk[:, np.newaxis]
     avg_means2 = means ** 2
     avg_X_means = means * np.dot(resp.T, X) / nk[:, np.newaxis]
-    covariances = (avg_X2 - 2 * avg_X_means + avg_means2 + reg_covar)
+    covariances = avg_X2 - 2 * avg_X_means + avg_means2 + reg_covar
     if np.any(np.less_equal(covariances, 0.0)):
         raise ValueError("The algorithm has diverged because of too "
                          "few samples per components. "
@@ -371,6 +372,7 @@ def _estimate_log_gaussian_prob_tied(X, means, precision_chol):
     log_det = -2. * np.sum(np.log(np.diagonal(precision_chol)))
     for k, mu in enumerate(means):
         y = np.dot(X - mu, precision_chol)
+        log_prob[:, k] = np.sum(np.square(y), axis=1)
     log_prob = - .5 * (n_features * np.log(2. * np.pi) + log_det + log_prob)
     return log_prob
 
@@ -394,7 +396,7 @@ def _estimate_log_gaussian_prob_diag(X, means, precisions):
     log_prob = - .5 * (n_features * np.log(2. * np.pi) -
                        np.sum(np.log(precisions), 1) +
                        np.sum((means ** 2 * precisions), 1) -
-                       2. * np.dot(X, (precisions * means).T) +
+                       2. * np.dot(X, (means * precisions).T) +
                        np.dot(X ** 2, precisions.T))
     return log_prob
 

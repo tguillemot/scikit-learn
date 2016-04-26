@@ -47,9 +47,11 @@ colors = ['navy', 'turquoise', 'darkorange']
 def make_ellipses(gmm, ax):
     for n, color in enumerate(colors):
         if gmm.precision_type == 'full':
-            covars = gmm.precisions_[n][:2, :2]
+            covars = np.dot(gmm.precisions_[n], gmm.precisions_[n].T)
+            covars = covars[:2, :2]
         elif gmm.precision_type == 'tied':
-            covars = gmm.precisions_[:2, :2]
+            covars = np.dot(gmm.precisions_, gmm.precisions_.T)
+            covars = covars[:2, :2]
         elif gmm.precision_type == 'diag':
             covars = np.diag(gmm.precisions_[n][:2])
         elif gmm.precision_type == 'spherical':
@@ -83,7 +85,7 @@ n_classes = len(np.unique(y_train))
 
 # Try GMMs using different types of covariances.
 estimators = dict((prec_type, GaussianMixture(n_components=n_classes,
-                   precision_type=prec_type, max_iter=20))
+                   precision_type=prec_type, max_iter=1))
                   for prec_type in ['spherical', 'diag', 'tied', 'full'])
 
 n_estimators = len(estimators)

@@ -116,7 +116,6 @@ def _check_precisions(precisions, precision_type, n_components, n_features):
     -------
     precisions : array
     """
-    print("pata")
     precisions = check_array(precisions, dtype=[np.float64, np.float32],
                              ensure_2d=False,
                              allow_nd=precision_type is 'full')
@@ -140,7 +139,7 @@ def _check_precisions(precisions, precision_type, n_components, n_features):
 ###############################################################################
 # Gaussian mixture parameters estimators (used by the M-Step)
 
-def _estimate_gaussian_precisions_full(resp, X, nk, means, reg_covar):
+def _estimate_gaussian_precisions_cholesky_full(resp, X, nk, means, reg_covar):
     """Estimate the full covariance matrices.
 
     Parameters
@@ -157,11 +156,12 @@ def _estimate_gaussian_precisions_full(resp, X, nk, means, reg_covar):
 
     Returns
     -------
-    precisions : array, shape (n_components, n_features, n_features)
+    precisions_chol : array, shape (n_components, n_features, n_features)
+        The cholesky decomposition of the precision matrix.
     """
     n_features = X.shape[1]
     n_components = means.shape[0]
-    precisions = np.empty((n_components, n_features, n_features))
+    precisions_chol = np.empty((n_components, n_features, n_features))
     for k in range(n_components):
         diff = X - means[k]
         covariance = np.dot(resp[:, k] * diff.T, diff) / nk[k]
@@ -173,12 +173,13 @@ def _estimate_gaussian_precisions_full(resp, X, nk, means, reg_covar):
                              "few samples per components. "
                              "Try to decrease the number of components, or "
                              "increase reg_covar.")
-        precisions[k] = linalg.solve_triangular(cov_chol, np.eye(n_features),
-                                                lower=True).T
-    return precisions
+        precisions_chol[k] = linalg.solve_triangular(cov_chol,
+                                                     np.eye(n_features),
+                                                     lower=True).T
+    return precisions_chol
 
 
-def _estimate_gaussian_precisions_tied(resp, X, nk, means, reg_covar):
+def _estimate_gaussian_precisions_cholesky_tied(resp, X, nk, means, reg_covar):
     """Estimate the tied covariance matrix.
 
     Parameters
@@ -195,7 +196,8 @@ def _estimate_gaussian_precisions_tied(resp, X, nk, means, reg_covar):
 
     Returns
     -------
-    precisions : array, shape (n_features, n_features)
+    precisions_chol : array, shape (n_features, n_features)
+        The cholesky decomposition of the precision matrix.
     """
     n_features = X.shape[1]
     avg_X2 = np.dot(X.T, X)
@@ -210,9 +212,9 @@ def _estimate_gaussian_precisions_tied(resp, X, nk, means, reg_covar):
                          "few samples per components. "
                          "Try to decrease the number of components, or "
                          "increase reg_covar.")
-    precisions = linalg.solve_triangular(cov_chol, np.eye(n_features),
-                                         lower=True).T
-    return precisions
+    precisions_chol = linalg.solve_triangular(cov_chol, np.eye(n_features),
+                                              lower=True).T
+    return precisions_chol
 
 
 def _estimate_gaussian_precisions_diag(resp, X, nk, means, reg_covar):
@@ -307,8 +309,8 @@ def _estimate_gaussian_parameters(X, resp, reg_covar, precision_type):
         components. The shape depends of the precision_type.
     """
     estimate_precisions = {
-        "full": _estimate_gaussian_precisions_full,
-        "tied": _estimate_gaussian_precisions_tied,
+        "full": _estimate_gaussian_precisions_cholesky_full,
+        "tied": _estimate_gaussian_precisions_cholesky_tied,
         "diag": _estimate_gaussian_precisions_diag,
         "spherical": _estimate_gaussian_precisions_spherical}
 
@@ -332,7 +334,7 @@ def _estimate_log_gaussian_prob_full(X, means, precisions_chol):
 
     means : array-like, shape (n_components, n_features)
 
-    precisions : array-like, shape (n_components, n_features, n_features)
+    precisions_chol : array-like, shape (n_components, n_features, n_features)
         Cholesky decompositions of the precision matrices.
 
     Returns
@@ -347,7 +349,6 @@ def _estimate_log_gaussian_prob_full(X, means, precisions_chol):
         y = np.dot(X - mu, prec_chol)
         log_prob[:, k] = - .5 * (n_features * np.log(2. * np.pi) + log_det +
                                  np.sum(np.square(y), axis=1))
-    print(log_prob)
     return log_prob
 
 
@@ -509,6 +510,15 @@ class GaussianMixture(BaseMixture):
         The mean of each mixture component.
         `means_` will not exist before a call to fit.
 
+    precisions_cholesky_ : array
+        The cholesky decomposition of each mixture component.
+        The shape depends on `precision_type`::
+            (n_components,)                        if 'spherical',
+            (n_features, n_features)               if 'tied',
+            (n_components, n_features)             if 'diag',
+            (n_components, n_features, n_features) if 'full'
+        `precisions_cholesky_` will not exist before a call to fit.
+
     precisions_ : array
         The precision of each mixture component.
         The shape depends on `precision_type`::
@@ -581,7 +591,7 @@ class GaussianMixture(BaseMixture):
         self.weights_ = (weights if self.weights_init is None
                          else self.weights_init)
         self.means_ = means if self.means_init is None else self.means_init
-        self.precisions_ = (precisions if self.precisions_init is None
+        self._precisions = (precisions if self.precisions_init is None
                             else self.precisions_init)
 
     def _e_step(self, X):
@@ -589,7 +599,7 @@ class GaussianMixture(BaseMixture):
         return np.mean(log_prob_norm), np.exp(log_resp)
 
     def _m_step(self, X, resp):
-        self.weights_, self.means_, self.precisions_ = (
+        self.weights_, self.means_, self._precisions = (
             _estimate_gaussian_parameters(X, resp, self.reg_covar,
                                           self.precision_type))
         self.weights_ /= X.shape[0]
@@ -602,19 +612,19 @@ class GaussianMixture(BaseMixture):
             "spherical": _estimate_log_gaussian_prob_spherical
         }
         return estimate_log_prob_functions[self.precision_type](
-            X, self.means_, self.precisions_)
+            X, self.means_, self._precisions)
 
     def _estimate_log_weights(self):
         return np.log(self.weights_)
 
     def _check_is_fitted(self):
-        check_is_fitted(self, ['weights_', 'means_', 'precisions_'])
+        check_is_fitted(self, ['weights_', 'means_', '_precisions'])
 
     def _get_parameters(self):
-        return self.weights_, self.means_, self.precisions_
+        return self.weights_, self.means_, self._precisions
 
     def _set_parameters(self, params):
-        self.weights_, self.means_, self.precisions_ = params
+        self.weights_, self.means_, self._precisions = params
 
     def _n_parameters(self):
         """Return the number of free parameters in the model."""
@@ -658,3 +668,22 @@ class GaussianMixture(BaseMixture):
             The greater the better.
         """
         return -2 * self.score(X) * X.shape[0] + 2 * self._n_parameters()
+
+    @property
+    def precisions_(self):
+        self._check_is_fitted()
+        if self.precision_type is 'full':
+            return np.array([np.dot(precs, precs.T)
+                            for precs in self._precisions])
+        elif self.precision_type is 'tied':
+            return np.dot(self._precisions, self._precisions.T)
+        else:
+            return self._precisions
+
+    @property
+    def precisions_cholesky_(self):
+        self._check_is_fitted()
+        if self.precision_type in ['full', 'tied']:
+            return self._precisions
+        else:
+            return np.sqrt(self._precisions)

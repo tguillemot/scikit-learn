@@ -47,16 +47,14 @@ colors = ['navy', 'turquoise', 'darkorange']
 def make_ellipses(gmm, ax):
     for n, color in enumerate(colors):
         if gmm.precision_type == 'full':
-            covars = np.dot(gmm.precisions_[n], gmm.precisions_[n].T)
-            covars = covars[:2, :2]
+            precisions = gmm.precisions_[n][:2, :2]
         elif gmm.precision_type == 'tied':
-            covars = np.dot(gmm.precisions_, gmm.precisions_.T)
-            covars = covars[:2, :2]
+            precisions = gmm.precisions_[:2, :2]
         elif gmm.precision_type == 'diag':
-            covars = np.diag(gmm.precisions_[n][:2])
+            precisions = np.diag(gmm.precisions_[n][:2])
         elif gmm.precision_type == 'spherical':
-            covars = np.eye(gmm.means_.shape[1]) * gmm.precisions_[n]
-        v, w = np.linalg.eigh(covars)
+            precisions = np.eye(gmm.means_.shape[1]) * gmm.precisions_[n]
+        v, w = np.linalg.eigh(precisions)
         u = w[0] / np.linalg.norm(w[0])
         angle = np.arctan2(u[1], u[0])
         angle = 180 * angle / np.pi  # convert to degrees

@@ -116,6 +116,7 @@ def _check_precisions(precisions, precision_type, n_components, n_features):
     -------
     precisions : array
     """
+    print("pata")
     precisions = check_array(precisions, dtype=[np.float64, np.float32],
                              ensure_2d=False,
                              allow_nd=precision_type is 'full')
@@ -127,10 +128,10 @@ def _check_precisions(precisions, precision_type, n_components, n_features):
     _check_shape(precisions, precisions_shape[precision_type],
                  '%s covariance' % precision_type)
 
-    check_functions = {'full': _check_covariances_full,
-                       'tied': _check_covariance_matrix,
-                       'diag': _check_covariance_positivity,
-                       'spherical': _check_covariance_positivity}
+    check_functions = {'full': _check_precisions_full,
+                       'tied': _check_precision_matrix,
+                       'diag': _check_precision_positivity,
+                       'spherical': _check_precision_positivity}
     check_functions[precision_type](precisions, precision_type)
 
     return precisions
@@ -173,8 +174,7 @@ def _estimate_gaussian_precisions_full(resp, X, nk, means, reg_covar):
                              "Try to decrease the number of components, or "
                              "increase reg_covar.")
         precisions[k] = linalg.solve_triangular(cov_chol, np.eye(n_features),
-                                                lower=True)
-    print(np.dot(precisions[0], precisions[0].T))
+                                                lower=True).T
     return precisions
 
 
@@ -211,7 +211,7 @@ def _estimate_gaussian_precisions_tied(resp, X, nk, means, reg_covar):
                          "Try to decrease the number of components, or "
                          "increase reg_covar.")
     precisions = linalg.solve_triangular(cov_chol, np.eye(n_features),
-                                         lower=True)
+                                         lower=True).T
     return precisions
 
 
@@ -347,6 +347,7 @@ def _estimate_log_gaussian_prob_full(X, means, precisions_chol):
         y = np.dot(X - mu, prec_chol)
         log_prob[:, k] = - .5 * (n_features * np.log(2. * np.pi) + log_det +
                                  np.sum(np.square(y), axis=1))
+    print(log_prob)
     return log_prob
 
 
@@ -559,10 +560,10 @@ class GaussianMixture(BaseMixture):
                                            self.n_components, X.shape[1])
 
         if self.precisions_init is not None:
-            self.precisions_init = _check_covariances(self.precisions_init,
-                                                       self.precision_type,
-                                                       self.n_components,
-                                                       X.shape[1])
+            self.precisions_init = _check_precisions(self.precisions_init,
+                                                     self.precision_type,
+                                                     self.n_components,
+                                                     X.shape[1])
 
     def _initialize(self, X, resp):
         """Initialization of the Gaussian mixture parameters.
@@ -581,7 +582,7 @@ class GaussianMixture(BaseMixture):
                          else self.weights_init)
         self.means_ = means if self.means_init is None else self.means_init
         self.precisions_ = (precisions if self.precisions_init is None
-                             else self.precisions_init)
+                            else self.precisions_init)
 
     def _e_step(self, X):
         log_prob_norm, _, log_resp = self._estimate_log_prob_resp(X)

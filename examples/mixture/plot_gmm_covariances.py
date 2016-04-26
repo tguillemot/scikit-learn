@@ -85,7 +85,7 @@ n_classes = len(np.unique(y_train))
 
 # Try GMMs using different types of covariances.
 estimators = dict((prec_type, GaussianMixture(n_components=n_classes,
-                   precision_type=prec_type, max_iter=1))
+                   precision_type=prec_type, max_iter=20, random_state=0))
                   for prec_type in ['spherical', 'diag', 'tied', 'full'])
 
 n_estimators = len(estimators)

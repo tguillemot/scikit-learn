@@ -72,25 +72,28 @@ def _check_means(means, n_components, n_features):
     return means
 
 
+def _check_precision_positivity(precision, precision_type):
+    """Check a precision vector is positive-definite."""
+    if np.any(np.less_equal(precision, 0.0)):
+        raise ValueError("'%s precision' should be "
+                         "positive" % precision_type)
+    return precision
+
+
 def _check_precision_matrix(precision, precision_type):
     """Check a precision matrix is symmetric and positive-definite."""
     if (not np.allclose(precision, precision.T) or
             np.any(np.less_equal(linalg.eigvalsh(precision), .0))):
         raise ValueError("'%s precision' should be symmetric, "
                          "positive-definite" % precision_type)
-
-
-def _check_precision_positivity(precision, precision_type):
-    """Check a precision vector is positive-definite."""
-    if np.any(np.less_equal(precision, 0.0)):
-        raise ValueError("'%s precision' should be "
-                         "positive" % precision_type)
+    return linalg.cholesky(precision, lower=True)
 
 
 def _check_precisions_full(precisions, precision_type):
     """Check the precision matrices are symmetric and positive-definite."""
     for k, prec in enumerate(precisions):
-        _check_precision_matrix(prec, precision_type)
+        prec = _check_precision_matrix(prec, precision_type)
+    return precisions
 
 
 def _check_precisions(precisions, precision_type, n_components, n_features):
@@ -127,13 +130,11 @@ def _check_precisions(precisions, precision_type, n_components, n_features):
     _check_shape(precisions, precisions_shape[precision_type],
                  '%s covariance' % precision_type)
 
-    check_functions = {'full': _check_precisions_full,
-                       'tied': _check_precision_matrix,
-                       'diag': _check_precision_positivity,
-                       'spherical': _check_precision_positivity}
-    check_functions[precision_type](precisions, precision_type)
-
-    return precisions
+    return {'full': _check_precisions_full,
+            'tied': _check_precision_matrix,
+            'diag': _check_precision_positivity,
+            'spherical': _check_precision_positivity
+            }[precision_type](precisions, precision_type)
 
 
 ###############################################################################
@@ -308,17 +309,13 @@ def _estimate_gaussian_parameters(X, resp, reg_covar, precision_type):
         The cholesky decomposition of sample precisions of the current
         components. The shape depends of the precision_type.
     """
-    estimate_precisions = {
-        "full": _estimate_gaussian_precisions_cholesky_full,
-        "tied": _estimate_gaussian_precisions_cholesky_tied,
-        "diag": _estimate_gaussian_precisions_diag,
-        "spherical": _estimate_gaussian_precisions_spherical}
-
     nk = resp.sum(axis=0) + 10 * np.finfo(resp.dtype).eps
     means = np.dot(resp.T, X) / nk[:, np.newaxis]
-    precisions = estimate_precisions[precision_type](resp, X, nk, means,
-                                                     reg_covar)
-
+    precisions = {"full": _estimate_gaussian_precisions_cholesky_full,
+                  "tied": _estimate_gaussian_precisions_cholesky_tied,
+                  "diag": _estimate_gaussian_precisions_diag,
+                  "spherical": _estimate_gaussian_precisions_spherical
+                  }[precision_type](resp, X, nk, means, reg_covar)
     return nk, means, precisions
 
 
@@ -605,14 +602,11 @@ class GaussianMixture(BaseMixture):
         self.weights_ /= X.shape[0]
 
     def _estimate_log_prob(self, X):
-        estimate_log_prob_functions = {
-            "full": _estimate_log_gaussian_prob_full,
-            "tied": _estimate_log_gaussian_prob_tied,
-            "diag": _estimate_log_gaussian_prob_diag,
-            "spherical": _estimate_log_gaussian_prob_spherical
-        }
-        return estimate_log_prob_functions[self.precision_type](
-            X, self.means_, self._precisions)
+        return {"full": _estimate_log_gaussian_prob_full,
+                "tied": _estimate_log_gaussian_prob_tied,
+                "diag": _estimate_log_gaussian_prob_diag,
+                "spherical": _estimate_log_gaussian_prob_spherical
+                }[self.precision_type](X, self.means_, self._precisions)
 
     def _estimate_log_weights(self):
         return np.log(self.weights_)

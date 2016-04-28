@@ -165,6 +165,13 @@ def _estimate_gaussian_covariance_full(resp, X, nk, means, reg_covar):
         diff = X - means[k]
         covariances[k] = np.dot(resp[:, k] * diff.T, diff) / nk[k]
         covariances[k].flat[::n_features + 1] += reg_covar
+        try:
+            covariances[k] = linalg.cholesky(covariances[k], lower=True)
+        except linalg.LinAlgError:
+            raise ValueError("The algorithm has diverged because of too "
+                             "few samples per components. "
+                             "Try to decrease the number of components, or "
+                             "increase reg_covar.")
     return covariances
 
 
@@ -192,6 +199,13 @@ def _estimate_gaussian_covariance_tied(resp, X, nk, means, reg_covar):
     covariances = avg_X2 - avg_means2
     covariances /= X.shape[0]
     covariances.flat[::len(covariances) + 1] += reg_covar
+    try:
+        covariances = linalg.cholesky(covariances, lower=True)
+    except linalg.LinAlgError:
+        raise ValueError("The algorithm has diverged because of too "
+                         "few samples per components. "
+                         "Try to decrease the number of components, or "
+                         "increase reg_covar.")
     return covariances
 
 
@@ -217,7 +231,13 @@ def _estimate_gaussian_covariance_diag(resp, X, nk, means, reg_covar):
     avg_X2 = np.dot(resp.T, X * X) / nk[:, np.newaxis]
     avg_means2 = means ** 2
     avg_X_means = means * np.dot(resp.T, X) / nk[:, np.newaxis]
-    return avg_X2 - 2 * avg_X_means + avg_means2 + reg_covar
+    covariance = avg_X2 - 2 * avg_X_means + avg_means2 + reg_covar
+    if np.any(np.less_equal(covariance, 0.0)):
+        raise ValueError("The algorithm has diverged because of too "
+                         "few samples per components. "
+                         "Try to decrease the number of components, or "
+                         "increase reg_covar.")
+    return covariance
 
 
 def _estimate_gaussian_covariance_spherical(resp, X, nk, means, reg_covar):
@@ -290,7 +310,7 @@ def _estimate_gaussian_parameters(X, resp, reg_covar, covariance_type):
 ###############################################################################
 # Gaussian mixture probability estimators
 
-def _estimate_log_gaussian_prob_full(X, means, covariances):
+def _estimate_log_gaussian_prob_full(X, means, covariances_chol):
     """Estimate the log Gaussian probability for 'full' covariance.
 
     Parameters
@@ -299,7 +319,8 @@ def _estimate_log_gaussian_prob_full(X, means, covariances):
 
     means : array-like, shape (n_components, n_features)
 
-    covariances : array-like, shape (n_components, n_features, n_features)
+    covariances_chol : array-like, shape (n_components, n_features, n_features)
+        Cholesky decompositions of the covariance matrices.
 
     Returns
     -------
@@ -308,14 +329,7 @@ def _estimate_log_gaussian_prob_full(X, means, covariances):
     n_samples, n_features = X.shape
     n_components = means.shape[0]
     log_prob = np.empty((n_samples, n_components))
-    for k, (mu, cov) in enumerate(zip(means, covariances)):
-        try:
-            cov_chol = linalg.cholesky(cov, lower=True)
-        except linalg.LinAlgError:
-            raise ValueError("The algorithm has diverged because of too "
-                             "few samples per components. "
-                             "Try to decrease the number of components, or "
-                             "increase reg_covar.")
+    for k, (mu, cov_chol) in enumerate(zip(means, covariances_chol)):
         cv_log_det = 2. * np.sum(np.log(np.diagonal(cov_chol)))
         cv_sol = linalg.solve_triangular(cov_chol, (X - mu).T, lower=True).T
         log_prob[:, k] = - .5 * (n_features * np.log(2. * np.pi) +
@@ -324,7 +338,7 @@ def _estimate_log_gaussian_prob_full(X, means, covariances):
     return log_prob
 
 
-def _estimate_log_gaussian_prob_tied(X, means, covariances):
+def _estimate_log_gaussian_prob_tied(X, means, covariance_chol):
     """Estimate the log Gaussian probability for 'tied' covariance.
 
     Parameters
@@ -333,7 +347,8 @@ def _estimate_log_gaussian_prob_tied(X, means, covariances):
 
     means : array-like, shape (n_components, n_features)
 
-    covariances : array-like, shape (n_features, n_features)
+    covariance_chol : array-like, shape (n_features, n_features)
+        Cholesky decomposition of the covariance matrix.
 
     Returns
     -------
@@ -342,16 +357,9 @@ def _estimate_log_gaussian_prob_tied(X, means, covariances):
     n_samples, n_features = X.shape
     n_components = means.shape[0]
     log_prob = np.empty((n_samples, n_components))
-    try:
-        cov_chol = linalg.cholesky(covariances, lower=True)
-    except linalg.LinAlgError:
-        raise ValueError("The algorithm has diverged because of too "
-                         "few samples per components. "
-                         "Try to decrease the number of components, or "
-                         "increase reg_covar.")
-    cv_log_det = 2. * np.sum(np.log(np.diagonal(cov_chol)))
+    cv_log_det = 2. * np.sum(np.log(np.diagonal(covariance_chol)))
     for k, mu in enumerate(means):
-        cv_sol = linalg.solve_triangular(cov_chol, (X - mu).T,
+        cv_sol = linalg.solve_triangular(covariance_chol, (X - mu).T,
                                          lower=True).T
         log_prob[:, k] = np.sum(np.square(cv_sol), axis=1)
     log_prob = - .5 * (n_features * np.log(2. * np.pi) + cv_log_det + log_prob)
@@ -416,8 +424,8 @@ def _estimate_log_gaussian_prob_spherical(X, means, covariances):
     return log_prob
 
 
-class GaussianMixture(BaseMixture):
-    """Gaussian Mixture.
+class GaussianMixtureCholesky(BaseMixture):
+    """Gaussian Mixture with a Cholesky decomposition.
 
     Representation of a Gaussian mixture model probability distribution.
     This class allows to estimate the parameters of a Gaussian mixture
@@ -522,7 +530,7 @@ class GaussianMixture(BaseMixture):
                  weights_init=None, means_init=None, covariances_init=None,
                  random_state=None, warm_start=False,
                  verbose=0, verbose_interval=10):
-        super(GaussianMixture, self).__init__(
+        super(GaussianMixtureCholesky, self).__init__(
             n_components=n_components, tol=tol, reg_covar=reg_covar,
             max_iter=max_iter, n_init=n_init, init_params=init_params,
             random_state=random_state, warm_start=warm_start,
@@ -571,7 +579,7 @@ class GaussianMixture(BaseMixture):
         self.weights_ = (weights if self.weights_init is None
                          else self.weights_init)
         self.means_ = means if self.means_init is None else self.means_init
-        self.covariances_ = (covariances if self.covariances_init is None
+        self._covariances = (covariances if self.covariances_init is None
                              else self.covariances_init)
 
     def _e_step(self, X):
@@ -579,7 +587,7 @@ class GaussianMixture(BaseMixture):
         return np.mean(log_prob_norm), np.exp(log_resp)
 
     def _m_step(self, X, resp):
-        self.weights_, self.means_, self.covariances_ = (
+        self.weights_, self.means_, self._covariances = (
             _estimate_gaussian_parameters(X, resp, self.reg_covar,
                                           self.covariance_type))
         self.weights_ /= X.shape[0]
@@ -592,19 +600,19 @@ class GaussianMixture(BaseMixture):
             "spherical": _estimate_log_gaussian_prob_spherical
         }
         return estimate_log_prob_functions[self.covariance_type](
-            X, self.means_, self.covariances_)
+            X, self.means_, self._covariances)
 
     def _estimate_log_weights(self):
         return np.log(self.weights_)
 
     def _check_is_fitted(self):
-        check_is_fitted(self, ['weights_', 'means_', 'covariances_'])
+        check_is_fitted(self, ['weights_', 'means_', '_covariances'])
 
     def _get_parameters(self):
-        return self.weights_, self.means_, self.covariances_
+        return self.weights_, self.means_, self._covariances
 
     def _set_parameters(self, params):
-        self.weights_, self.means_, self.covariances_ = params
+        self.weights_, self.means_, self._covariances = params
 
     def _n_parameters(self):
         """Return the number of free parameters in the model."""
@@ -648,3 +656,22 @@ class GaussianMixture(BaseMixture):
             The greater the better.
         """
         return -2 * self.score(X) * X.shape[0] + 2 * self._n_parameters()
+
+    @property
+    def covariances_(self):
+        self._check_is_fitted()
+        if self.covariance_type is 'full':
+            return np.array([np.dot(cov, cov.T)
+                            for cov in self._covariances])
+        elif self.covariance_type is 'tied':
+            return np.dot(self._covariances, self._covariances.T)
+        else:
+            return self._covariances
+
+    @property
+    def covariances_cholesky_(self):
+        self._check_is_fitted()
+        if self.covariance_type in ['full', 'tied']:
+            return self._covariances
+        else:
+            return np.sqrt(self._covariances)

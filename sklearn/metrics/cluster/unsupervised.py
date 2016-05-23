@@ -1,7 +1,8 @@
-""" Unsupervised evaluation metrics. """
+"""Unsupervised evaluation metrics."""
 
 # Authors: Robert Layton <robertlayton@gmail.com>
-#
+#          Arnaud Fouchet <foucheta@gmail.com>
+#          Thierry Guillemot <thierry.guillemot.work@gmail.com>
 # License: BSD 3 clause
 
 import numpy as np
@@ -14,7 +15,7 @@ from ...preprocessing import LabelEncoder
 
 def silhouette_score(X, labels, metric='euclidean', sample_size=None,
                      random_state=None, **kwds):
-    """Compute the mean Silhouette Coefficient of all samples.
+    r"""Compute the mean Silhouette Coefficient of all samples.
 
     The Silhouette Coefficient is calculated using the mean intra-cluster
     distance (``a``) and the mean nearest-cluster distance (``b``) for each
@@ -50,12 +51,12 @@ def silhouette_score(X, labels, metric='euclidean', sample_size=None,
         array itself, use ``metric="precomputed"``.
 
     sample_size : int or None
-        The size of the sample to use when computing the Silhouette Coefficient 
-        on a random subset of the data. 
+        The size of the sample to use when computing the Silhouette Coefficient
+        on a random subset of the data.
         If ``sample_size is None``, no sampling is used.
 
     random_state : integer or numpy.RandomState, optional
-        The generator used to randomly select a subset of samples if 
+        The generator used to randomly select a subset of samples if
         ``sample_size is not None``. If an integer is given, it fixes the seed.
         Defaults to the global numpy random number generator.
 
@@ -102,7 +103,7 @@ def silhouette_score(X, labels, metric='euclidean', sample_size=None,
 
 
 def silhouette_samples(X, labels, metric='euclidean', **kwds):
-    """Compute the Silhouette Coefficient for each sample.
+    r"""Compute the Silhouette Coefficient for each sample.
 
     The Silhouette Coefficient is a measure of how well samples are clustered
     with samples that are similar to themselves. Clustering models with a high
@@ -201,3 +202,112 @@ def silhouette_samples(X, labels, metric='euclidean', **kwds):
     sil_samples = inter_clust_dists - intra_clust_dists
     sil_samples /= np.maximum(intra_clust_dists, inter_clust_dists)
     return sil_samples
+
+
+def calinski_harabaz_score(X, labels):
+    r"""Compute the Calinski and Harabaz score.
+
+    The score is defined as ratio between the within-cluster dispersion and
+    the between-cluster dispersion. For :math:`K` cluster, the Calinski and
+    Harabaz score is defined as::
+
+        CH(K) = trace(B_K) / (K -1) * (n - K) / trace(W_K)
+
+    With :math:`B_K` the between group dispersion matrix and :math:`W_K`
+    the within-cluster dispersion matrix defined by::
+        B_K = \sum_k n_k (c_k - c) (c_k -c)^T
+        W_K = \sum_k \sum_{x \in C_k} (x - c_k) (x - c_k)^T
+
+    The score ranges from 0 to 1.
+
+    Parameter
+    ---------
+    X : array-like, shape (n_samples, n_features)
+        List of n_features-dimensional data points. Each row corresponds
+        to a single data point.
+
+    labels : array-like, shape (n_samples,)
+        Predicted labels for each sample.
+
+    Return
+    ------
+    score: float
+        The resulting Calinski-Harabaz score.
+
+    References
+    ----------
+    .. [1] `T. Calinski and J. Harabasz, 1974. "A dendrite method for cluster
+       analysis". Communications in Statistics
+       <http://www.tandfonline.com/doi/abs/10.1080/03610927408827101>`_
+    """
+    X, labels = check_X_y(X, labels)
+    le = LabelEncoder()
+    labels = le.fit_transform(labels)
+
+    n_samples, _ = X.shape
+    n_labels = len(le.classes_)
+
+    if not 1 < n_labels < n_samples:
+        raise ValueError("Number of labels is %d. Valid values are 2 "
+                         "to n_samples - 1 (inclusive)" % n_labels)
+
+    extra_disp, intra_disp = 0., 0.
+    mean = np.mean(X, axis=0)
+    for k in range(n_labels):
+        cluster_k = X[labels == k]
+        mean_k = np.mean(cluster_k, axis=0)
+        extra_disp += len(cluster_k) * np.sum((mean_k - mean) ** 2)
+        intra_disp += np.sum((cluster_k - mean_k) ** 2)
+
+    return (1. if intra_disp == 0. else
+            extra_disp * (n_samples - n_labels) /
+            (intra_disp * (n_labels - 1.)))
+
+
+def distortion_score(X, labels, metric="euclidean", **kwds):
+    """Compute the distortion of a given dataset and their cluster assignment.
+
+    Parameters
+    ----------
+    X : array-like, shape (n_samples, n_features)
+        List of n_features-dimensional data points. Each row corresponds
+        to a single data point.
+
+    labels : array-like, shape (n_samples,)
+        Predicted labels for each sample.
+
+    metric : string, or callable
+        The metric to use when calculating distance between instances in a
+        feature array. If metric is a string, it must be one of the options
+        allowed by :func:`sklearn.metrics.pairwise.pairwise_distances`.
+
+    **kwds : optional keyword parameters
+        Any further parameters are passed directly to the distance function.
+        If using a scipy.spatial.distance metric, the parameters are still
+        metric dependent. See the scipy docs for usage examples.
+
+    Returns
+    -------
+    score: float
+        The resulting distortion value.
+    """
+    X, labels = check_X_y(X, labels)
+    le = LabelEncoder()
+    labels = le.fit_transform(labels)
+
+    n_samples, n_features = X.shape
+    n_labels = len(le.classes_)
+
+    if not 1 < n_labels < n_samples:
+        raise ValueError("Number of labels is %d. Valid values are 2 "
+                         "to n_samples - 1 (inclusive)" % n_labels)
+
+    dist = 0.
+    for k in range(n_labels):
+        cluster_k = X[labels == k]
+        mean_k = np.mean(cluster_k, axis=0)
+        dist += np.sum(pairwise_distances(cluster_k,
+                                          mean_k[:, np.newaxis].reshape(1, -1),
+                                          metric=metric, **kwds))
+
+    return dist / n_features

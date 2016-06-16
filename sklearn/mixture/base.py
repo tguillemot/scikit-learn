@@ -136,7 +136,7 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         ----------
         X : array-like, shape  (n_samples, n_features)
         """
-        n_samples = X.shape[0]
+        n_samples, _ = X.shape
         random_state = check_random_state(self.random_state)
 
         if self.init_params == 'kmeans':
@@ -145,8 +145,12 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
                                    random_state=random_state).fit(X).labels_
             resp[np.arange(n_samples), label] = 1
         elif self.init_params == 'random':
-            resp = random_state.rand(X.shape[0], self.n_components)
+            resp = random_state.rand(n_samples, self.n_components)
             resp /= resp.sum(axis=1)[:, np.newaxis]
+        elif self.init_params == 'test':
+            resp = np.array([random_state.dirichlet(np.ones(self.n_components))
+                            for _ in range(n_samples)])
+            print('NK', resp.sum(0))
         else:
             raise ValueError("Unimplemented initialization method '%s'"
                              % self.init_params)
@@ -199,6 +203,7 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
 
             if do_init:
                 self._initialize_parameters(X)
+
             current_log_likelihood, resp = self._e_step(X)
 
             for n_iter in range(self.max_iter):

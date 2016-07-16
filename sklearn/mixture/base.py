@@ -142,15 +142,15 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         if self.init_params == 'kmeans':
             resp = np.zeros((n_samples, self.n_components))
             label = cluster.KMeans(n_clusters=self.n_components, n_init=1,
-                                   random_state=random_state).fit(X).labels_
+                                   random_state=0).fit(X).labels_
             resp[np.arange(n_samples), label] = 1
+            print('NK', list(resp.sum(0)))
         elif self.init_params == 'random':
             resp = random_state.rand(n_samples, self.n_components)
             resp /= resp.sum(axis=1)[:, np.newaxis]
         elif self.init_params == 'test':
             resp = np.array([random_state.dirichlet(np.ones(self.n_components))
                             for _ in range(n_samples)])
-            print('NK', resp.sum(0))
         else:
             raise ValueError("Unimplemented initialization method '%s'"
                              % self.init_params)
@@ -212,6 +212,7 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
                 self._m_step(X, resp)
                 current_log_likelihood, resp = self._e_step(X)
                 change = current_log_likelihood - prev_log_likelihood
+                print(change, current_log_likelihood)
                 self._print_verbose_msg_iter_end(n_iter, change)
 
                 if abs(change) < self.tol:

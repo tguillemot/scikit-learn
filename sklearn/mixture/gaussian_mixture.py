@@ -189,11 +189,10 @@ def _estimate_gaussian_covariances_tied(resp, X, nk, means, reg_covar):
     covariance : array, shape (n_features, n_features)
         The tied covariance matrix of the components.
     """
-    n_samples, _ = X.shape
     avg_X2 = np.dot(X.T, X)
     avg_means2 = np.dot(nk * means.T, means)
     covariance = avg_X2 - avg_means2
-    covariance /= n_samples
+    covariance /= nk.sum()
     covariance.flat[::len(covariance) + 1] += reg_covar
     return covariance
 
@@ -456,7 +455,7 @@ class GaussianMixture(BaseMixture):
 
     tol : float, defaults to 1e-3.
         The convergence threshold. EM iterations will stop when the
-        log_likelihood average gain is below this threshold.
+        lower bound average gain is below this threshold.
 
     reg_covar : float, defaults to 0.
         Non-negative regularization added to the diagonal of covariance.
@@ -557,6 +556,11 @@ class GaussianMixture(BaseMixture):
 
     lower_bound_ : float
         Log-likelihood of the best fit of EM.
+
+    See Also
+    --------
+    BayesianGaussianMixture : Finite gaussian mixture model fit with a
+        variational algorithm.
     """
 
     def __init__(self, n_components=1, covariance_type='full', tol=1e-3,

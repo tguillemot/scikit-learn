@@ -207,3 +207,35 @@ def test_bayesian_mixture_precisions_prior_initialisation():
         assert_almost_equal(covariance_prior_default[cov_type],
                             bgmm.covariance_prior_)
 
+
+def test_bayesian_mixture_check_is_fitted():
+    rng = np.random.RandomState(0)
+    n_samples, n_features = 10, 2
+
+    # Check raise message
+    bgmm = BayesianGaussianMixture()
+    X = rng.rand(n_samples, n_features)
+    assert_raise_message(ValueError,
+                         'This BayesianGaussianMixture instance is not '
+                         'fitted yet.', bgmm.score, X)
+
+
+def test_bayesian_mixture_weights():
+    rng = np.random.RandomState(0)
+    n_samples, n_features = 10, 2
+
+    X = rng.rand(n_samples, n_features)
+    bgmm = BayesianGaussianMixture().fit(X)
+
+    # Check the weights values
+    expected_weights = (bgmm.dirichlet_concentration_ /
+                        np.sum(bgmm.dirichlet_concentration_))
+    predected_weights = bgmm.weights_
+
+    assert_almost_equal(expected_weights, predected_weights)
+
+    # Check the weights sum = 1
+    assert_almost_equal(np.sum(bgmm.weights_), 1.0)
+
+
+

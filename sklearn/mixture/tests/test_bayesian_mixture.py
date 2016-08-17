@@ -220,22 +220,7 @@ def test_bayesian_mixture_check_is_fitted():
                          'fitted yet.', bgmm.score, X)
 
 
-def test_bayesian_mixture_weights():
-    rng = np.random.RandomState(0)
-    n_samples, n_features = 10, 2
 
-    X = rng.rand(n_samples, n_features)
-    bgmm = BayesianGaussianMixture().fit(X)
-
-    # Check the weights values
-    expected_weights = (bgmm.dirichlet_concentration_ /
-                        np.sum(bgmm.dirichlet_concentration_))
-    predected_weights = bgmm.weights_
-
-    assert_almost_equal(expected_weights, predected_weights)
-
-    # Check the weights sum = 1
-    assert_almost_equal(np.sum(bgmm.weights_), 1.0)
 
 
 

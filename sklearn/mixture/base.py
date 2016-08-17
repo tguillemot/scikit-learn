@@ -200,7 +200,7 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
 
             if do_init:
                 self._initialize_parameters(X)
-                self.lower_bound_ = np.infty
+                self.lower_bound_ = -np.infty
 
             current_log_likelihood, resp = self._e_step(X)
             for n_iter in range(self.max_iter):

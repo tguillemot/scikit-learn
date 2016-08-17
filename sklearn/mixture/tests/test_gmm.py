@@ -173,6 +173,7 @@ class GMMTester():
         self.means = rng.randint(-20, 20, (self.n_components, self.n_features))
         self.threshold = -0.5
         self.I = np.eye(self.n_features)
+        self.random_state = 0
         self.covars = {
             'spherical': (0.1 + 2 * rng.rand(self.n_components,
                                              self.n_features)) ** 2,

@@ -24,8 +24,8 @@ is not for you.
 This implementation is expected to scale at least as well as EM for
 the Gaussian mixture.
 
-Update rules for VB inference
-==============================
+Update rules for Variational Bayesian inference
+===============================================
 
 Here the full mathematical derivation of the Variational Bayes update
 rules for Gaussian Mixture Models is given.
@@ -79,6 +79,8 @@ where
         & = & \prod_{k=1}^K \mathcal{N}(\boldsymbol{\mu}_k|\mathbf{m}_0, (\beta_0\boldsymbol{\Lambda}_k)^{-1})
                           \mathcal{W}(\boldsymbol{\Lambda}_k| \mathbf{W}_0, \nu_0)
    \end{eqnarray*}
+
+where :math:`C(\boldsymbol{\alpha}_0) = \frac{\Gamma(K \alpha_0){\Gamma(\alpha_0)^K}`
 
 We will consider the variational distribution which factorizes between the
 latent variables and the parameters

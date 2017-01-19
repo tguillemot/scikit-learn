@@ -23,7 +23,7 @@ per cluster than there are dimensions in the data, due to
 regularization properties of the inference algorithm.
 """
 
-import itertools
+import itertool
 
 import numpy as np
 from scipy import linalg

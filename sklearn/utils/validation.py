@@ -6,6 +6,7 @@
 #          Lars Buitinck
 #          Alexandre Gramfort
 #          Nicolas Tresegnie
+#          Thierry Guillemot
 # License: BSD 3 clause
 
 import warnings
@@ -20,6 +21,7 @@ from .deprecation import deprecated
 from ..exceptions import DataConversionWarning as _DataConversionWarning
 from ..exceptions import NonBLASDotWarning as _NonBLASDotWarning
 from ..exceptions import NotFittedError as _NotFittedError
+from ..exceptions import ExtraPropertyWarning
 
 
 @deprecated("DataConversionWarning has been moved into the sklearn.exceptions"
@@ -428,6 +430,24 @@ def check_array(array, accept_sparse=None, dtype="numeric", order=None,
                % (dtype_orig, array.dtype, context))
         warnings.warn(msg, _DataConversionWarning)
     return array
+
+
+def check_sample_props(sample_props, attributes, whom):
+    """Perform the parsing of the sample properties."""
+    # TODO
+    # X manage dunder -> must be managed directly in the corresponding estimat
+    # - check size of each property
+
+    extra_keys = list(
+        k for k, value in sample_props.items() if k not in attributes)
+    if extra_keys:
+        warnings.warn(
+            "The properties %s provided through `sample_props` are not used "
+            "by %s. The results obtained may be different from the one "
+            "expected. Maybe the key name is spelled incorrectly." %
+            (extra_keys, whom), ExtraPropertyWarning, stacklevel=2)
+
+    return {k: sample_props.get(k, None) for k in attributes}
 
 
 def check_X_y(X, y, accept_sparse=None, dtype="numeric", order=None,

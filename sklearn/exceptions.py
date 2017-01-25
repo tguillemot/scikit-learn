@@ -144,3 +144,13 @@ class UndefinedMetricWarning(UserWarning):
     .. versionchanged:: 0.18
        Moved from sklearn.base.
     """
+
+
+class ExtraPropertyWarning(UserWarning):
+    """Warning used when an extra sample properties is provided.
+
+    This warning is used to notify the user that extra properties have been
+    sent through `sample_props`.
+
+    .. versionadded:: 0.19
+    """
